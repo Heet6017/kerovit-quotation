@@ -1,6 +1,6 @@
 import * as store from "./store.js";
 import { buildIndex, search, highlight } from "./search.js";
-import { esc, rupee, inr, calcLine, calcQuote, seriesLabel, productLabel, todayISO, fmtDate, fileBase, download } from "./common.js";
+import { esc, rupee, inr, calcLine, calcQuote, seriesLabel, productLabel, todayISO, fmtDate, fileBase, download, amountInWords } from "./common.js";
 import { buildXlsx } from "./xlsx-export.js";
 import { buildPdf } from "./pdf-export.js";
 import { parsePriceList, diffPriceList, applyPriceList } from "./pricelist.js";
@@ -209,10 +209,13 @@ function renderItems() {
 
 function renderTotals() {
   const t = calcQuote(q, settings.gst);
+  $("#tQty").textContent = t.qty;
+  $("#tMrp").textContent = rupee(t.mrpTotal);
   $("#tSub").textContent = rupee(t.sub);
-  $("#tGstLabel").textContent = `Add GST @ ${settings.gst}%`;
+  $("#tGstLabel").textContent = `Total TAX (GST ${settings.gst}%)`;   // on screen there is room for the rate
   $("#tGst").textContent = rupee(t.gst);
-  $("#tGrand").textContent = rupee(t.grand);
+  $("#tGrand").textContent = rupee(t.net, 0);
+  $("#tWords").innerHTML = q.items.length ? `<b>Amount (In Words):</b> ${esc(amountInWords(t.net))}` : "";
 }
 
 $("#items").addEventListener("input", (e) => {

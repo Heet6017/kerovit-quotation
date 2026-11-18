@@ -1,7 +1,7 @@
 // Excel export: fills the real template (assets/template.xlsx) by editing its XML directly,
 // so the logos, header text boxes, colours, borders and T&C stay exactly as designed.
 // (Excel libraries such as ExcelJS drop the template's text boxes, so they can't be used.)
-import { calcLine, calcQuote, fmtDate, productLabel, seriesLabel, loadImageScaled, round2 } from "./common.js";
+import { calcLine, calcQuote, fmtDate, productLabel, seriesLabel, loadImageScaled, round2, amountInWords } from "./common.js";
 import { imageURL } from "./store.js";
 
 const TEMPLATE_URL = "assets/template.xlsx";
@@ -18,7 +18,8 @@ const xmlEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;",
 const colOf = (i) => "ABCDEFGHIJK"[i];
 
 // Indian-grouped rupee format with paise: ₹1,02,300.00
-const INR_FMT = '[&gt;=10000000]&quot;₹&quot;##\\,##\\,##\\,##0.00;[&gt;=100000]&quot;₹&quot;##\\,##\\,##0.00;&quot;₹&quot;#,##0.00';
+const INR_FMT0 = '[&gt;=10000000]&quot;₹&quot;##\\,##\\,##\\,##0;[&gt;=100000]&quot;₹&quot;##\\,##\\,##0;&quot;₹&quot;#,##0';
+const INR_FMT ='[&gt;=10000000]&quot;₹&quot;##\\,##\\,##\\,##0.00;[&gt;=100000]&quot;₹&quot;##\\,##\\,##0.00;&quot;₹&quot;#,##0.00';
 
 class Styles {
   constructor(xml) {
@@ -36,8 +37,20 @@ class Styles {
       .replace("</fills>", solid("FFF4F8FD") + solid("FFE3EDF9") + "</fills>");
     this.rowFill = { even: nFills, odd: nFills + 1 };
     // add the rupee number format
-    this.xml = this.xml.replace(/<numFmts count="(\d+)">/, (_, n) => `<numFmts count="${Number(n) + 1}">`)
-      .replace("</numFmts>", `<numFmt numFmtId="165" formatCode="${INR_FMT}"/></numFmts>`);
+    this.xml = this.xml.replace(/<numFmts count="(\d+)">/, (_, n) => `<numFmts count="${Number(n) + 2}">`)
+      .replace("</numFmts>", `<numFmt numFmtId="165" formatCode="${INR_FMT}"/><numFmt numFmtId="166" formatCode="${INR_FMT0}"/></numFmts>`);
+    this.borderCount = Number(this.xml.match(/<borders count="(\d+)"/)[1]);
+    this.borderCache = new Map();
+  }
+  /** border with the given styles ("thin" / "medium") on left, right, top, bottom */
+  border(l, r, t, b) {
+    const key = [l, r, t, b].join("|");
+    if (this.borderCache.has(key)) return this.borderCache.get(key);
+    const side = (n, s) => `<${n} style="${s}"><color indexed="64"/></${n}>`;
+    const x = `<border>${side("left", l)}${side("right", r)}${side("top", t)}${side("bottom", b)}<diagonal/></border>`;
+    this.xml = this.xml.replace(/<borders count="\d+"/, `<borders count="${this.borderCount + 1}"`).replace("</borders>", x + "</borders>");
+    this.borderCache.set(key, this.borderCount);
+    return this.borderCount++;
   }
   addFont(fontXml) {
     this.xml = this.xml.replace(/<fonts count="(\d+)"/, (_, n) => `<fonts count="${Number(n) + 1}"`)
@@ -194,20 +207,63 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   // ---- rows after the products (spacer, totals, T&C) shift by `delta`
   const tot = calcQuote(q, settings.gst);
+
+  // Summary block (template rows 29–31), organised in five boxes:
+  //   Total Quantity A:B | Total MRP C:D | Total Taxable Amt E:F | Total TAX G:H | Net Amt I:J
+  //   then "Amount (In Words)" across A:J
+  const navyFill = 6, tintFill = 3, whiteFill = 2;
+  const fLabel = styles.addFont('<font><b/><sz val="10"/><color rgb="FF17365D"/><name val="Calibri"/><family val="2"/></font>');
+  const fLabelW = styles.addFont('<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
+  const fValue = styles.addFont('<font><b/><sz val="12"/><name val="Calibri"/><family val="2"/></font>');
+  const fValueW = styles.addFont('<font><b/><sz val="13"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
+  const sumCell = (col, row, opts) => {        // border: medium on the outer edge of the block
+    const l = col === "A" ? "medium" : "thin", rr = col === "J" ? "medium" : "thin";
+    const t = row === 29 ? "medium" : "thin", b = row === 31 ? "medium" : "thin";
+    return styles.xf({ ...opts, border: styles.border(l, rr, t, b), v: "center" });
+  };
+  const BOXES = [["A", "B"], ["C", "D"], ["E", "F"], ["G", "H"], ["I", "J"]];
+  const LABELS = ["Total Quantity", "Total MRP", "Total Taxable Amt", "Total TAX", "Net Amt"];
+  const summaryMerges = [];
+  function summaryRow(r, nr) {
+    const net = (i) => i === 4;
+    if (r === 29) {
+      const cells = BOXES.flatMap(([a, b], i) => {
+        const s = (c) => sumCell(c, 29, { font: net(i) ? fLabelW : fLabel, fill: net(i) ? navyFill : tintFill, h: "center", wrap: true });
+        summaryMerges.push(`${a}${nr}:${b}${nr}`);
+        return [strCell(`${a}${nr}`, s(a), LABELS[i]), blankCell(`${b}${nr}`, s(b))];
+      });
+      return `<row r="${nr}" spans="1:11" ht="20" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`;
+    }
+    if (r === 30) {
+      const vals = [
+        [`SUM(G${FIRST_DATA_ROW}:G${lastData})`, tot.qty, 0],
+        [`SUMPRODUCT(F${FIRST_DATA_ROW}:F${lastData},G${FIRST_DATA_ROW}:G${lastData})`, tot.mrpTotal, 165],
+        [`SUM(J${FIRST_DATA_ROW}:J${lastData})`, tot.sub, 165],
+        [`ROUND(E${nr}*${settings.gst}/100,2)`, tot.gst, 165],
+        [`ROUND(E${nr}+G${nr},0)`, tot.net, 166],
+      ];
+      const cells = BOXES.flatMap(([a, b], i) => {
+        const s = (c) => sumCell(c, 30, { numFmt: vals[i][2], font: net(i) ? fValueW : fValue,
+          fill: net(i) ? navyFill : whiteFill, h: "center", shrink: true });
+        summaryMerges.push(`${a}${nr}:${b}${nr}`);
+        return [fCell(`${a}${nr}`, s(a), vals[i][0], vals[i][1]), blankCell(`${b}${nr}`, s(b))];
+      });
+      return `<row r="${nr}" spans="1:11" ht="26" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`;
+    }
+    // r === 31: amount in words
+    const s = (c) => sumCell(c, 31, { font: fLabel, fill: styles.rowFill.even, h: "left", wrap: true });
+    const run = (t, bold, color) => `<r><rPr>${bold ? "<b/>" : ""}<sz val="11"/>${color ? `<color rgb="${color}"/>` : ""}<rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(t)}</t></r>`;
+    const rich = run("Amount (In Words): ", true, "FF17365D") + run(amountInWords(tot.net), false, "FF1C2733");
+    summaryMerges.push(`A${nr}:J${nr}`);
+    const cells = [`<c r="A${nr}" s="${s("A")}" t="inlineStr"><is>${rich}</is></c>`,
+      ..."BCDEFGHIJ".split("").map((c) => blankCell(`${c}${nr}`, s(c)))];
+    return `<row r="${nr}" spans="1:11" ht="21" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`;
+  }
   const after = [];
   for (let r = SPACER_ROW; r <= LAST_ROW; r++) {
     let x = shiftRowXml(rows[r], delta);
     const nr = r + delta;
-    if (r === 29) x = x.replace(new RegExp(`<c r="J${nr}" s="(\\d+)"[^>]*>[\\s\\S]*?</c>`),
-      (_, s) => fCell(`J${nr}`, styles.withFmt(Number(s), 165), `SUM(J${FIRST_DATA_ROW}:J${lastData})`, tot.sub));
-    if (r === 30) {
-      x = x.replace(new RegExp(`<c r="J${nr}" s="(\\d+)"[^>]*>[\\s\\S]*?</c>`),
-        (_, s) => fCell(`J${nr}`, styles.withFmt(Number(s), 165), `ROUND(J${nr - 1}*${settings.gst}/100,2)`, tot.gst));
-      if (Number(settings.gst) !== 18) x = x.replace(new RegExp(`<c r="A${nr}" s="(\\d+)" t="s"><v>\\d+</v></c>`),
-        (_, s) => strCell(`A${nr}`, s, `ADD GST @ ${settings.gst}%`));
-    }
-    if (r === 31) x = x.replace(new RegExp(`<c r="J${nr}" s="(\\d+)"[^>]*>[\\s\\S]*?</c>`),
-      (_, s) => fCell(`J${nr}`, styles.withFmt(Number(s), 165), `J${nr - 2}+J${nr - 1}`, tot.grand));
+    if (r >= 29 && r <= 31) x = summaryRow(r, nr);
     if (r === 44 && settings.closing) {
       // closing banner in the bottom row: white bold text on navy, "Bathrooms You Desire" larger
       const fid = styles.addFont('<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
@@ -232,8 +288,12 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   const before = [1, 2, 3].map((r) => rows[r]).join("");
   sheet = sheet.replace(/<sheetData>[\s\S]*<\/sheetData>/, `<sheetData>${before}${dataXml.join("")}${after.join("")}</sheetData>`);
-  sheet = sheet.replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g, (m, c1, r1, c2, r2) =>
-    Number(r1) >= SPACER_ROW ? `<mergeCell ref="${c1}${Number(r1) + delta}:${c2}${Number(r2) + delta}"/>` : m);
+  sheet = sheet.replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g, (m, c1, r1, c2, r2) => {
+    if (Number(r1) >= 29 && Number(r1) <= 31) return "";          // old total rows: replaced by the summary block
+    return Number(r1) >= SPACER_ROW ? `<mergeCell ref="${c1}${Number(r1) + delta}:${c2}${Number(r2) + delta}"/>` : m;
+  });
+  sheet = sheet.replace("</mergeCells>", summaryMerges.map((ref) => `<mergeCell ref="${ref}"/>`).join("") + "</mergeCells>");
+  sheet = sheet.replace(/<mergeCells count="\d+">/, () => `<mergeCells count="${(sheet.match(/<mergeCell ref=/g) || []).length}">`);
   if (settings.closing) {
     sheet = sheet.replace(/<mergeCells count="(\d+)">/, (_, n) => `<mergeCells count="${Number(n) + 1}">`)
       .replace("</mergeCells>", `<mergeCell ref="A${LAST_ROW + delta}:J${LAST_ROW + delta}"/></mergeCells>`);

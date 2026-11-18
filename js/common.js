@@ -42,12 +42,49 @@ export function calcLine(it) {
   return { rate, total };
 }
 
+/**
+ * Quotation totals:
+ *  qty      Total Quantity
+ *  mrpTotal Total MRP (MRP × qty, before discount)
+ *  sub      Total Taxable Amt (after discount)
+ *  gst      Total TAX
+ *  grand    taxable + tax;  net = grand rounded to the rupee (Net Amt)
+ */
 export function calcQuote(q, gstPct) {
-  let sub = 0;
-  for (const it of q.items) sub += calcLine(it).total;
+  let sub = 0, qty = 0, mrpTotal = 0;
+  for (const it of q.items) {
+    sub += calcLine(it).total;
+    qty += Number(it.qty) || 0;
+    mrpTotal += (Number(it.mrp) || 0) * (Number(it.qty) || 0);
+  }
   sub = round2(sub);
   const gst = round2(sub * gstPct / 100);
-  return { sub, gst, grand: round2(sub + gst) };
+  const grand = round2(sub + gst);
+  return { sub, gst, grand, qty, mrpTotal: round2(mrpTotal), net: Math.round(grand) };
+}
+
+const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+  "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+function words99(n) { return n < 20 ? ONES[n] : `${TENS[Math.floor(n / 10)]}${n % 10 ? " " + ONES[n % 10] : ""}`; }
+function words999(n) {
+  const h = Math.floor(n / 100), r = n % 100;
+  return [h ? ONES[h] + " Hundred" : "", r ? words99(r) : ""].filter(Boolean).join(" ");
+}
+
+/** 108967 -> "One Lakh Eight Thousand Nine Hundred Sixty Seven Rupees Only" (Indian numbering) */
+export function amountInWords(amount) {
+  let n = Math.round(Number(amount) || 0);
+  if (n === 0) return "Zero Rupees Only";
+  const parts = [];
+  const crore = Math.floor(n / 10000000); n %= 10000000;
+  const lakh = Math.floor(n / 100000); n %= 100000;
+  const thousand = Math.floor(n / 1000); n %= 1000;
+  if (crore) parts.push((crore > 99 ? words999(crore) : words99(crore)) + " Crore");
+  if (lakh) parts.push(words99(lakh) + " Lakh");
+  if (thousand) parts.push(words99(thousand) + " Thousand");
+  if (n) parts.push(words999(n));
+  return parts.join(" ") + " Rupees Only";
 }
 
 export function fmtDate(iso) {

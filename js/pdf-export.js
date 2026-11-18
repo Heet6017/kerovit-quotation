@@ -1,6 +1,6 @@
 // PDF export: draws the quotation with the same geometry, colours and fonts as the Excel
 // template printed on A4 (Carlito = metric-compatible Calibri, includes the ₹ sign).
-import { calcLine, calcQuote, fmtDate, inr, loadImageScaled } from "./common.js";
+import { calcLine, calcQuote, fmtDate, inr, loadImageScaled, amountInWords } from "./common.js";
 import { imageURL } from "./store.js";
 
 const A4 = { w: 595.28, h: 841.89 };
@@ -146,8 +146,8 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
 
   // footer sizes (needed up front to decide how tall the product rows can be)
   const hs = 50 * RK * 0.5;
-  const totRows = [14.5, 14.5, 15];
-  const totH = totRows.reduce((a, r) => a + r * RK * 1.25, 0);
+  const SUM_LABEL_H = 17, SUM_VALUE_H = 24, SUM_WORDS_H = 20;   // summary block (labels / values / words)
+  const totH = SUM_LABEL_H + SUM_VALUE_H + SUM_WORDS_H;
   font("normal", F11);
   const termLines = settings.terms.map((t) => doc.splitTextToSize(t, RIGHT - M - 8));
   const tlh = 14.5 * RK;
@@ -220,26 +220,45 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   y += hs;
 
   // ---------------------------------------------------------------- totals
+  // Summary: one row of labels, one row of values, then the amount in words.
+  //   Total Quantity (A:B) | Total MRP (C:D) | Total Taxable Amt (E:F) | Total TAX (G:H) | Net Amt (I:J)
   const tot = calcQuote(q, settings.gst);
-  const rows = [
-    ["TOTAL AMOUNT", tot.sub, totRows[0]],
-    [`ADD GST @ ${settings.gst}%`, tot.gst, totRows[1]],
-    ["TOTAL AMOUNT INCLUDING TAXES", tot.grand, totRows[2]],
+  const boxes = [
+    [0, 2, "Total Quantity", String(tot.qty)],
+    [2, 4, "Total MRP", "₹" + inr(tot.mrpTotal)],
+    [4, 6, "Total Taxable Amt", "₹" + inr(tot.sub)],
+    [6, 8, "Total TAX", "₹" + inr(tot.gst)],
+    [8, 10, "Net Amt", "₹" + inr(tot.net, 0)],
   ];
   if (y + totH > BOTTOM) newPage();
-  line(M, y, RIGHT, y, MEDIUM);
-  for (const [label, val, ht] of rows) {
-    const h = ht * RK * 1.25;
-    fill(M, y, RIGHT - M, h, C.totals);
-    font("bold", F11, C.ink);
-    doc.text(label, colX[9] - 3, y + h / 2 + F11 * 0.33, { align: "right" });
-    const s = "₹" + inr(val), avail = colW(9) - 4, w = doc.getTextWidth(s);
-    if (w > avail) doc.setFontSize(F11 * avail / w);
-    doc.text(s, RIGHT - 2, y + h / 2 + F11 * 0.33, { align: "right" });
-    line(colX[9], y, colX[9], y + h, THIN);
-    line(M, y + h, RIGHT, y + h, THIN);
-    y += h;
+  const sumTop = y;
+  const fitText = (s, x0, x1, yy, size, style, color) => {
+    font(style, size, color);
+    const avail = x1 - x0 - 6, w = doc.getTextWidth(s);
+    if (w > avail) doc.setFontSize(size * avail / w);
+    doc.text(s, (x0 + x1) / 2, yy, { align: "center" });
+  };
+  for (const [a, b, label, val] of boxes) {
+    const x0 = colX[a], x1 = colX[b], net = label === "Net Amt";
+    fill(x0, y, x1 - x0, SUM_LABEL_H, net ? C.navy : C.totals);
+    fitText(label, x0, x1, y + SUM_LABEL_H / 2 + F9 * 0.35, F9 * 1.05, "bold", net ? C.white : C.tcHead);
+    fill(x0, y + SUM_LABEL_H, x1 - x0, SUM_VALUE_H, net ? C.navy : C.white);
+    fitText(val, x0, x1, y + SUM_LABEL_H + SUM_VALUE_H / 2 + F11 * 0.38, F11 * (net ? 1.25 : 1.1), "bold", net ? C.white : C.ink);
+    box(x0, y, x1 - x0, SUM_LABEL_H + SUM_VALUE_H, THIN);
   }
+  line(M, y + SUM_LABEL_H, RIGHT, y + SUM_LABEL_H, THIN);
+  y += SUM_LABEL_H + SUM_VALUE_H;
+  // amount in words
+  fill(M, y, RIGHT - M, SUM_WORDS_H, C.hdr2);
+  font("bold", F11 * 0.95, C.tcHead);
+  const lab = "Amount (In Words): ";
+  doc.text(lab, M + 5, y + SUM_WORDS_H / 2 + F11 * 0.33);
+  const lw = doc.getTextWidth(lab);
+  font("normal", F11 * 0.95, C.ink);
+  doc.text(amountInWords(tot.net), M + 5 + lw, y + SUM_WORDS_H / 2 + F11 * 0.33);
+  box(M, y, RIGHT - M, SUM_WORDS_H, THIN);
+  y += SUM_WORDS_H;
+  line(M, sumTop, RIGHT, sumTop, MEDIUM);
   line(M, y, RIGHT, y, MEDIUM);
 
   // ---------------------------------------------------------------- terms & conditions

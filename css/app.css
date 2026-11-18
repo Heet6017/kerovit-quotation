@@ -153,6 +153,8 @@ table { border-collapse: collapse; width: 100%; }
 .empty { padding: 28px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; margin-top: 8px; }
 .totals { margin-left: auto; max-width: 420px; margin-top: 14px; }
 .totals div { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid #edf1f5; }
+.totals .words { margin: 8px 4px 0; font-size: 13px; color: var(--muted); }
+.totals .words b { color: var(--navy-d); }
 .totals .grand { background: var(--tint2); border-radius: 8px; border: 0; padding: 10px 12px; margin-top: 6px; font-size: 16px; color: var(--navy-d); }
 
 /* ---------- lists ---------- */
