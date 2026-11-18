@@ -209,11 +209,18 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
     if (r === 31) x = x.replace(new RegExp(`<c r="J${nr}" s="(\\d+)"[^>]*>[\\s\\S]*?</c>`),
       (_, s) => fCell(`J${nr}`, styles.withFmt(Number(s), 165), `J${nr - 2}+J${nr - 1}`, tot.grand));
     if (r === 44 && settings.closing) {
-      // closing message in the bottom band of the template
-      const fid = styles.addFont('<font><b/><i/><sz val="11"/><color rgb="FF17365D"/><name val="Calibri"/><family val="2"/></font>');
-      const gs = styles.xf({ font: fid, fill: 5, border: styles.attr(18, "borderId"), h: "center", v: "center", wrap: true });
-      x = x.replace(/ ht="15"/, ' ht="32" customHeight="1"')
-        .replace(new RegExp(`<c r="A${nr}" s="\\d+"/>`), strCell(`A${nr}`, gs, settings.closing));
+      // closing banner in the bottom row: white bold text on navy, "Bathrooms You Desire" larger
+      const fid = styles.addFont('<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
+      const navy = 6;   // template fill #1F4E78 (table heading colour)
+      const gs = styles.xf({ font: fid, fill: navy, border: styles.attr(18, "borderId"), h: "center", v: "center", wrap: true });
+      const mid = styles.xf({ font: fid, fill: navy, border: styles.attr(19, "borderId"), v: "center" });
+      const end = styles.xf({ font: fid, fill: navy, border: styles.attr(20, "borderId"), v: "center" });
+      const run = (t, sz) => t ? `<r><rPr><b/><sz val="${sz}"/><color rgb="FFFFFFFF"/><rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(t)}</t></r>` : "";
+      const c = settings.closing, m = c.match(/bathrooms you desire/i);
+      const rich = m ? run(c.slice(0, m.index), 12) + run(m[0], 13.5) + run(c.slice(m.index + m[0].length), 12) : run(c, 12);
+      x = x.replace(/ ht="15"/, ' ht="30" customHeight="1"')
+        .replace(new RegExp(`<c r="A${nr}" s="\\d+"/>`), `<c r="A${nr}" s="${gs}" t="inlineStr"><is>${rich}</is></c>`)
+        .replace(/ s="19"/g, ` s="${mid}"`).replace(/ s="20"/g, ` s="${end}"`);
     }
     if (r >= 33 && r <= 43) {
       const term = settings.terms[r - 33];
@@ -284,7 +291,10 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   // ---- workbook: recalculate formulas on open, repeat header row when printing
   workbook = workbook.replace(/<calcPr ([^>]*)\/>/, (m, a) => a.includes("fullCalcOnLoad") ? m : `<calcPr ${a} fullCalcOnLoad="1"/>`);
-  if (!workbook.includes("_xlnm.Print_Titles")) {
+  // repeat the column headings on later pages only when the product rows don't fit on page 1
+  // (A4 with 0.5" margins ≈ 770 pt printable; rows 1–3 take 186.5 pt)
+  const productsFitPage1 = 186.5 + heights.reduce((a, h) => a + h, 0) <= 770;
+  if (!productsFitPage1 && !workbook.includes("_xlnm.Print_Titles")) {
     workbook = workbook.replace("</sheets>", '</sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">Sheet1!$3:$3</definedName></definedNames>');
   }
 

@@ -195,12 +195,14 @@ export const DEFAULT_TERMS = [
 ];
 
 const SETTINGS_KEY = "kq.settings";
-export const DEFAULT_CLOSING = "Thank you for choosing Kerovit. We truly appreciate your trust in us and look forward to serving you.";
+export const DEFAULT_CLOSING = "Thank you for considering Kerovit. We look forward to helping you create Bathrooms You Desire.";
+const OLD_CLOSINGS = ["Thank you for choosing Kerovit. We truly appreciate your trust in us and look forward to serving you."];
 const DEFAULT_SETTINGS = { gst: 18, nextNo: 1, prefix: "KQ/", keepRows: false, terms: DEFAULT_TERMS, closing: DEFAULT_CLOSING };
 
 export function getSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    if (!s.closing || OLD_CLOSINGS.includes(s.closing)) delete s.closing;   // old default -> new default
     return { ...DEFAULT_SETTINGS, ...s, terms: Array.isArray(s.terms) && s.terms.length ? s.terms : DEFAULT_TERMS };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }

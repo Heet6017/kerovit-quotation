@@ -133,12 +133,14 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
 
   const sideBorders = (from, to) => { line(M, from, M, to, MEDIUM); line(RIGHT, from, RIGHT, to, MEDIUM); };
   let segTop = pageTop;
-  const newPage = () => {
+  // column headings are repeated only when product rows continue on the new page
+  const newPage = (withHeader = false) => {
     sideBorders(segTop, y);
     line(M, y, RIGHT, y, MEDIUM);
     doc.addPage("a4", "portrait");
     y = M; segTop = M;
-    drawHeader();
+    if (withHeader) drawHeader();
+    else line(M, y, RIGHT, y, MEDIUM);
   };
   const BOTTOM = A4.h - M;
 
@@ -150,8 +152,8 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   const termLines = settings.terms.map((t) => doc.splitTextToSize(t, RIGHT - M - 8));
   const tlh = 14.5 * RK;
   font("bold", F11);
-  const closingLines = settings.closing ? doc.splitTextToSize(settings.closing, RIGHT - M - 16) : [];
-  const closingH = closingLines.length ? closingLines.length * F11 * 1.25 + 14 : 0;
+  const closing = (settings.closing || "").trim();
+  const closingH = closing ? 30 : 0;     // navy banner at the bottom
   const tcH = 15.5 * RK + termLines.reduce((a, l) => a + l.length * tlh, 0) + 15 * RK + closingH;
 
   // ---------------------------------------------------------------- product rows
@@ -172,7 +174,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     const lh = F9 * 1.18;
     const need = Math.max(L.B.length, L.C.length, L.D.length) * lh + 2 * pad + 2;
     const h = Math.max(rowH, need);
-    if (y + h > BOTTOM) newPage();
+    if (y + h > BOTTOM) newPage(true);
 
     const bg = i % 2 === 0 ? C.even : C.odd;
     fill(M, y, RIGHT - M, h, bg);
@@ -259,11 +261,27 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     logoRight(kerovit, "ker", anchorX(9, 527050), ay, by - ay);
   }
   y += 15 * RK;
-  if (closingLines.length) {
-    // closing message
-    line(M + 40, y - 4, RIGHT - 40, y - 4, 0.3);
-    font("bold", F11, C.tcHead);
-    closingLines.forEach((ln, i) => doc.text(ln, (M + RIGHT) / 2, y + 6 + F11 * 0.9 + i * F11 * 1.25, { align: "center" }));
+  if (closing) {
+    // closing banner: white bold text on navy, the tagline "Bathrooms You Desire" heavier
+    fill(M, y, RIGHT - M, closingH, C.navy);
+    const m = closing.match(/bathrooms you desire/i);
+    const parts = m ? [[closing.slice(0, m.index), false], [m[0], true], [closing.slice(m.index + m[0].length), false]]
+      : [[closing, false]];
+    let fs = F11 * 1.05;
+    const width = () => parts.reduce((a, [t, em]) => { font("bold", em ? fs * 1.06 : fs); return a + doc.getTextWidth(t); }, 0);
+    while (width() > RIGHT - M - 16 && fs > 6) fs -= 0.25;
+    let x = (M + RIGHT) / 2 - width() / 2;
+    const base = y + closingH / 2 + fs * 0.33;
+    for (const [t, em] of parts) {
+      if (!t) continue;
+      font("bold", em ? fs * 1.06 : fs, C.white);
+      if (em) {   // extra-bold: fill and outline the letters
+        doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.45);
+        doc.text(t, x, base, { renderingMode: "fillThenStroke" });
+        doc.setDrawColor(...C.line);
+      } else doc.text(t, x, base);
+      x += doc.getTextWidth(t);
+    }
     y += closingH;
   }
   line(M, tcTop, RIGHT, tcTop, MEDIUM);
