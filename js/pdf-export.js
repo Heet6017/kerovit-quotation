@@ -146,8 +146,8 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
 
   // footer sizes (needed up front to decide how tall the product rows can be)
   const hs = 50 * RK * 0.5;
-  const SUM_LABEL_H = 17, SUM_VALUE_H = 24, SUM_WORDS_H = 20;   // summary block (labels / values / words)
-  const totH = SUM_LABEL_H + SUM_VALUE_H + SUM_WORDS_H;
+  const SUM_ROW_H = 15 * RK * 1.2;                 // each totals line (template row height, a little air)
+  const totH = SUM_ROW_H * 6;                      // 5 totals + amount in words
   font("normal", F11);
   const termLines = settings.terms.map((t) => doc.splitTextToSize(t, RIGHT - M - 8));
   const tlh = 14.5 * RK;
@@ -161,7 +161,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   // Many products: template row height, flowing over several pages.
   const minH = 50 * RK;
   const pad = 3;
-  const space = BOTTOM - y - hs - totH - tcH;
+  const space = BOTTOM - y - hs - totH - tcH - 6;
   const nItems = q.items.length;
   const rowH = nItems && nItems * minH <= space ? Math.min(100, Math.max(minH, space / nItems)) : minH;
   for (let i = 0; i < q.items.length; i++) {
@@ -220,44 +220,39 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   y += hs;
 
   // ---------------------------------------------------------------- totals
-  // Summary: one row of labels, one row of values, then the amount in words.
-  //   Total Quantity (A:B) | Total MRP (C:D) | Total Taxable Amt (E:F) | Total TAX (G:H) | Net Amt (I:J)
+  // Totals one below another, like the template: label right-aligned, amount in the last column,
+  // then the amount in words on the last line.
   const tot = calcQuote(q, settings.gst);
-  const boxes = [
-    [0, 2, "Total Quantity", String(tot.qty)],
-    [2, 4, "Total MRP", "₹" + inr(tot.mrpTotal)],
-    [4, 6, "Total Taxable Amt", "₹" + inr(tot.sub)],
-    [6, 8, "Total TAX", "₹" + inr(tot.gst)],
-    [8, 10, "Net Amt", "₹" + inr(tot.net, 0)],
+  const rows = [
+    ["Total Quantity", String(tot.qty)],
+    ["Total MRP", "₹" + inr(tot.mrpTotal)],
+    ["Total Taxable Amt", "₹" + inr(tot.sub)],
+    [`Total TAX (GST ${settings.gst}%)`, "₹" + inr(tot.gst)],
+    ["Net Amt", "₹" + inr(tot.net, 0)],
   ];
   if (y + totH > BOTTOM) newPage();
   const sumTop = y;
-  const fitText = (s, x0, x1, yy, size, style, color) => {
-    font(style, size, color);
-    const avail = x1 - x0 - 6, w = doc.getTextWidth(s);
-    if (w > avail) doc.setFontSize(size * avail / w);
-    doc.text(s, (x0 + x1) / 2, yy, { align: "center" });
-  };
-  for (const [a, b, label, val] of boxes) {
-    const x0 = colX[a], x1 = colX[b], net = label === "Net Amt";
-    fill(x0, y, x1 - x0, SUM_LABEL_H, net ? C.navy : C.totals);
-    fitText(label, x0, x1, y + SUM_LABEL_H / 2 + F9 * 0.35, F9 * 1.05, "bold", net ? C.white : C.tcHead);
-    fill(x0, y + SUM_LABEL_H, x1 - x0, SUM_VALUE_H, net ? C.navy : C.white);
-    fitText(val, x0, x1, y + SUM_LABEL_H + SUM_VALUE_H / 2 + F11 * 0.38, F11 * (net ? 1.25 : 1.1), "bold", net ? C.white : C.ink);
-    box(x0, y, x1 - x0, SUM_LABEL_H + SUM_VALUE_H, THIN);
+  const h = SUM_ROW_H;
+  for (const [label, val] of rows) {
+    fill(M, y, RIGHT - M, h, C.totals);
+    font("bold", F11, C.ink);
+    doc.text(label, colX[8] - 4, y + h / 2 + F11 * 0.33, { align: "right" });
+    const avail = RIGHT - colX[8] - 6, w = doc.getTextWidth(val);
+    if (w > avail) doc.setFontSize(F11 * avail / w);
+    doc.text(val, RIGHT - 4, y + h / 2 + F11 * 0.33, { align: "right" });
+    line(colX[8], y, colX[8], y + h, THIN);
+    line(M, y + h, RIGHT, y + h, THIN);
+    y += h;
   }
-  line(M, y + SUM_LABEL_H, RIGHT, y + SUM_LABEL_H, THIN);
-  y += SUM_LABEL_H + SUM_VALUE_H;
   // amount in words
-  fill(M, y, RIGHT - M, SUM_WORDS_H, C.hdr2);
-  font("bold", F11 * 0.95, C.tcHead);
+  fill(M, y, RIGHT - M, h, C.totals);
+  font("bold", F11, C.ink);
   const lab = "Amount (In Words): ";
-  doc.text(lab, M + 5, y + SUM_WORDS_H / 2 + F11 * 0.33);
+  doc.text(lab, M + 4, y + h / 2 + F11 * 0.33);
   const lw = doc.getTextWidth(lab);
-  font("normal", F11 * 0.95, C.ink);
-  doc.text(amountInWords(tot.net), M + 5 + lw, y + SUM_WORDS_H / 2 + F11 * 0.33);
-  box(M, y, RIGHT - M, SUM_WORDS_H, THIN);
-  y += SUM_WORDS_H;
+  font("normal", F11, C.ink);
+  doc.text(amountInWords(tot.net), M + 4 + lw, y + h / 2 + F11 * 0.33);
+  y += h;
   line(M, sumTop, RIGHT, sumTop, MEDIUM);
   line(M, y, RIGHT, y, MEDIUM);
 

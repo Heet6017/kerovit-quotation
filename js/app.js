@@ -212,7 +212,7 @@ function renderTotals() {
   $("#tQty").textContent = t.qty;
   $("#tMrp").textContent = rupee(t.mrpTotal);
   $("#tSub").textContent = rupee(t.sub);
-  $("#tGstLabel").textContent = `Total TAX (GST ${settings.gst}%)`;   // on screen there is room for the rate
+  $("#tGstLabel").textContent = `Total TAX (GST ${settings.gst}%)`;
   $("#tGst").textContent = rupee(t.gst);
   $("#tGrand").textContent = rupee(t.net, 0);
   $("#tWords").innerHTML = q.items.length ? `<b>Amount (In Words):</b> ${esc(amountInWords(t.net))}` : "";

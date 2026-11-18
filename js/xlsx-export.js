@@ -173,7 +173,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   const S = [rowStyles(styles, true), rowStyles(styles, false)];
   // few products -> taller rows (bigger photos); many products -> template height of 50
-  const baseH = items.length && !settings.keepRows ? Math.max(50, Math.min(100, Math.floor(280 / items.length))) : 50;
+  const baseH = items.length && !settings.keepRows ? Math.max(50, Math.min(100, Math.floor(215 / items.length))) : 50;
   const dataXml = [];
   const heights = [];
   for (let i = 0; i < nRows; i++) {
@@ -208,62 +208,48 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   // ---- rows after the products (spacer, totals, T&C) shift by `delta`
   const tot = calcQuote(q, settings.gst);
 
-  // Summary block (template rows 29–31), organised in five boxes:
-  //   Total Quantity A:B | Total MRP C:D | Total Taxable Amt E:F | Total TAX G:H | Net Amt I:J
-  //   then "Amount (In Words)" across A:J
-  const navyFill = 6, tintFill = 3, whiteFill = 2;
-  const fLabel = styles.addFont('<font><b/><sz val="10"/><color rgb="FF17365D"/><name val="Calibri"/><family val="2"/></font>');
-  const fLabelW = styles.addFont('<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
-  const fValue = styles.addFont('<font><b/><sz val="12"/><name val="Calibri"/><family val="2"/></font>');
-  const fValueW = styles.addFont('<font><b/><sz val="13"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
-  const sumCell = (col, row, opts) => {        // border: medium on the outer edge of the block
-    const l = col === "A" ? "medium" : "thin", rr = col === "J" ? "medium" : "thin";
-    const t = row === 29 ? "medium" : "thin", b = row === 31 ? "medium" : "thin";
-    return styles.xf({ ...opts, border: styles.border(l, rr, t, b), v: "center" });
-  };
-  const BOXES = [["A", "B"], ["C", "D"], ["E", "F"], ["G", "H"], ["I", "J"]];
-  const LABELS = ["Total Quantity", "Total MRP", "Total Taxable Amt", "Total TAX", "Net Amt"];
+  // Totals, one below another in the template's style (label right-aligned across A:I, amount in J),
+  // then the amount in words across A:J. Template rows 29–31 become 6 rows, so the rows below move down 3.
+  const EXTRA = 3;
+  const firstSum = 29 + delta;
   const summaryMerges = [];
-  function summaryRow(r, nr) {
-    const net = (i) => i === 4;
-    if (r === 29) {
-      const cells = BOXES.flatMap(([a, b], i) => {
-        const s = (c) => sumCell(c, 29, { font: net(i) ? fLabelW : fLabel, fill: net(i) ? navyFill : tintFill, h: "center", wrap: true });
-        summaryMerges.push(`${a}${nr}:${b}${nr}`);
-        return [strCell(`${a}${nr}`, s(a), LABELS[i]), blankCell(`${b}${nr}`, s(b))];
-      });
-      return `<row r="${nr}" spans="1:11" ht="20" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`;
-    }
-    if (r === 30) {
-      const vals = [
-        [`SUM(G${FIRST_DATA_ROW}:G${lastData})`, tot.qty, 0],
-        [`SUMPRODUCT(F${FIRST_DATA_ROW}:F${lastData},G${FIRST_DATA_ROW}:G${lastData})`, tot.mrpTotal, 165],
-        [`SUM(J${FIRST_DATA_ROW}:J${lastData})`, tot.sub, 165],
-        [`ROUND(E${nr}*${settings.gst}/100,2)`, tot.gst, 165],
-        [`ROUND(E${nr}+G${nr},0)`, tot.net, 166],
-      ];
-      const cells = BOXES.flatMap(([a, b], i) => {
-        const s = (c) => sumCell(c, 30, { numFmt: vals[i][2], font: net(i) ? fValueW : fValue,
-          fill: net(i) ? navyFill : whiteFill, h: "center", shrink: true });
-        summaryMerges.push(`${a}${nr}:${b}${nr}`);
-        return [fCell(`${a}${nr}`, s(a), vals[i][0], vals[i][1]), blankCell(`${b}${nr}`, s(b))];
-      });
-      return `<row r="${nr}" spans="1:11" ht="26" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`;
-    }
-    // r === 31: amount in words
-    const s = (c) => sumCell(c, 31, { font: fLabel, fill: styles.rowFill.even, h: "left", wrap: true });
-    const run = (t, bold, color) => `<r><rPr>${bold ? "<b/>" : ""}<sz val="11"/>${color ? `<color rgb="${color}"/>` : ""}<rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(t)}</t></r>`;
-    const rich = run("Amount (In Words): ", true, "FF17365D") + run(amountInWords(tot.net), false, "FF1C2733");
+  const SUM = [
+    ["Total Quantity", `SUM(G${FIRST_DATA_ROW}:G${lastData})`, tot.qty, 0],
+    ["Total MRP", `SUMPRODUCT(F${FIRST_DATA_ROW}:F${lastData},G${FIRST_DATA_ROW}:G${lastData})`, tot.mrpTotal, 165],
+    ["Total Taxable Amt", `SUM(J${FIRST_DATA_ROW}:J${lastData})`, tot.sub, 165],
+    [`Total TAX (GST ${settings.gst}%)`, `ROUND(I${firstSum + 2}*${settings.gst}/100,2)`, tot.gst, 165],
+    ["Net Amt", `ROUND(I${firstSum + 2}+I${firstSum + 3},0)`, tot.net, 166],
+  ];
+  function summaryRows() {
+    const out = [];
+    SUM.forEach(([label, f, v, fmt], i) => {
+      const nr = firstSum + i, first = i === 0;
+      // template styles: first total row (29) has the thick top line, the others are like row 30
+      const sA = first ? 29 : 31, sMid = first ? 30 : 32, sJ = first ? 6 : 7;
+      const sV = styles.withFmt(sJ, fmt);
+      const cells = [strCell(`A${nr}`, sA, label), ..."BCDEFGH".split("").map((c) => blankCell(`${c}${nr}`, sMid)),
+        fCell(`I${nr}`, sV, f, v), blankCell(`J${nr}`, sV)];
+      summaryMerges.push(`A${nr}:H${nr}`, `I${nr}:J${nr}`);
+      out.push(`<row r="${nr}" spans="1:11" ht="17" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
+    });
+    // amount in words: last line of the block, thick bottom line like template row 31
+    const nr = firstSum + SUM.length;
+    const sw = styles.xf({ font: styles.attr(33, "fontId"), fill: styles.attr(33, "fillId"), border: styles.attr(33, "borderId"), h: "left", v: "center" });
+    const run = (s, bold) => `<r><rPr>${bold ? "<b/>" : ""}<sz val="11"/><rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(s)}</t></r>`;
+    const rich = run("Amount (In Words): ", true) + run(amountInWords(tot.net), false);
+    const cells = [`<c r="A${nr}" s="${sw}" t="inlineStr"><is>${rich}</is></c>`,
+      ..."BCDEFGHI".split("").map((c) => blankCell(`${c}${nr}`, 34)), blankCell(`J${nr}`, 8)];
     summaryMerges.push(`A${nr}:J${nr}`);
-    const cells = [`<c r="A${nr}" s="${s("A")}" t="inlineStr"><is>${rich}</is></c>`,
-      ..."BCDEFGHIJ".split("").map((c) => blankCell(`${c}${nr}`, s(c)))];
-    return `<row r="${nr}" spans="1:11" ht="21" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`;
+    out.push(`<row r="${nr}" spans="1:11" ht="18" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
+    return out;
   }
   const after = [];
   for (let r = SPACER_ROW; r <= LAST_ROW; r++) {
-    let x = shiftRowXml(rows[r], delta);
-    const nr = r + delta;
-    if (r >= 29 && r <= 31) x = summaryRow(r, nr);
+    if (r === 29) { after.push(...summaryRows()); continue; }
+    if (r === 30 || r === 31) continue;
+    const shift = r >= 32 ? delta + EXTRA : delta;
+    let x = shiftRowXml(rows[r], shift);
+    const nr = r + shift;
     if (r === 44 && settings.closing) {
       // closing banner in the bottom row: white bold text on navy, "Bathrooms You Desire" larger
       const fid = styles.addFont('<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
@@ -289,17 +275,19 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   const before = [1, 2, 3].map((r) => rows[r]).join("");
   sheet = sheet.replace(/<sheetData>[\s\S]*<\/sheetData>/, `<sheetData>${before}${dataXml.join("")}${after.join("")}</sheetData>`);
   sheet = sheet.replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g, (m, c1, r1, c2, r2) => {
-    if (Number(r1) >= 29 && Number(r1) <= 31) return "";          // old total rows: replaced by the summary block
-    return Number(r1) >= SPACER_ROW ? `<mergeCell ref="${c1}${Number(r1) + delta}:${c2}${Number(r2) + delta}"/>` : m;
+    const a = Number(r1), b = Number(r2);
+    if (a >= 29 && a <= 31) return "";          // old total rows: replaced by the totals block
+    const sh = a >= 32 ? delta + EXTRA : a >= SPACER_ROW ? delta : 0;
+    return sh ? `<mergeCell ref="${c1}${a + sh}:${c2}${b + sh}"/>` : m;
   });
   sheet = sheet.replace("</mergeCells>", summaryMerges.map((ref) => `<mergeCell ref="${ref}"/>`).join("") + "</mergeCells>");
   sheet = sheet.replace(/<mergeCells count="\d+">/, () => `<mergeCells count="${(sheet.match(/<mergeCell ref=/g) || []).length}">`);
   if (settings.closing) {
     sheet = sheet.replace(/<mergeCells count="(\d+)">/, (_, n) => `<mergeCells count="${Number(n) + 1}">`)
-      .replace("</mergeCells>", `<mergeCell ref="A${LAST_ROW + delta}:J${LAST_ROW + delta}"/></mergeCells>`);
+      .replace("</mergeCells>", `<mergeCell ref="A${LAST_ROW + delta + EXTRA}:J${LAST_ROW + delta + EXTRA}"/></mergeCells>`);
   }
   sheet = sheet.replace(/<col min="5" max="16384" [^>]*\/>/, COLS_XML);
-  sheet = sheet.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="A1:K${LAST_ROW + delta}"/>`);
+  sheet = sheet.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="A1:K${LAST_ROW + delta + EXTRA}"/>`);
   // print: A4, fit all columns on the page width, header row repeated on every page
   sheet = sheet.replace(/<pageSetup [^>]*\/>/, '<pageSetup paperSize="9" fitToHeight="0" orientation="portrait" r:id="rId1"/>');
   if (!sheet.includes("<sheetPr")) sheet = sheet.replace("<dimension", '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension');
@@ -322,7 +310,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
       `<xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${off}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${rowOff}</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/>`) +
       "</xdr:oneCellAnchor>";
     if (m.includes('name="Picture 2"')) return one(6, 53340, 0, 82550, 1847850, 636145);
-    if (m.includes('name="Picture 9"')) return one(7, 180000, 40 + delta, 69851, 1320800, 454702);
+    if (m.includes('name="Picture 9"')) return one(7, 180000, 40 + delta + EXTRA, 69851, 1320800, 454702);
     return m;
   });
 
