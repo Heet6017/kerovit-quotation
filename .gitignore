@@ -1,0 +1,11 @@
+﻿# price data in plain text - never publish (only data/products.enc goes online)
+data/products.json
+data/products.csv
+data/extract_report.txt
+*.pdf
+testdata/
+
+# local tooling
+.claude/
+__pycache__/
+*.pyc

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kerovit Quotation Maker</title>
+<link rel="icon" href="assets/logo-kerovit.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="assets/logo-kerovit.png" alt="Kerovit">
+    <div>
+      <div class="brand-title">Quotation Maker</div>
+      <div class="brand-sub" id="priceListBadge">Loading price list…</div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="quote" class="active">New Quotation</button>
+    <button data-tab="saved">Saved</button>
+    <button data-tab="prices">Price List</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ============ NEW QUOTATION ============ -->
+  <section id="tab-quote" class="tab active">
+    <div class="steps">
+      <!-- Step 1: customer -->
+      <div class="card">
+        <div class="card-head"><span class="num">1</span><h2>Customer details</h2>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="btnNew" title="Start a fresh quotation">+ New quotation</button>
+        </div>
+        <div class="grid2">
+          <label>Customer Name<input id="fCustomer" autocomplete="off" placeholder="e.g. Mr. Rajesh Patel"></label>
+          <label>Mobile Number<input id="fMobile" inputmode="tel" autocomplete="off" placeholder="e.g. 98250 12345"></label>
+          <label class="span2">Project / Site Address<textarea id="fAddress" rows="2" placeholder="Site / project address"></textarea></label>
+          <label>Quotation Date<input id="fDate" type="date"></label>
+          <label>Quotation No.<input id="fNumber" autocomplete="off"></label>
+        </div>
+      </div>
+
+      <!-- Step 2: type + discount -->
+      <div class="card">
+        <div class="card-head"><span class="num">2</span><h2>Quotation type &amp; discount</h2></div>
+        <div class="types" id="typeChoices">
+          <button data-type="Retail" class="type">RETAIL</button>
+          <button data-type="Special Approval" class="type">SPECIAL APPROVAL</button>
+          <button data-type="Project Supply" class="type">PROJECT SUPPLY</button>
+        </div>
+        <div class="disc-row">
+          <label>Discount %<input id="fDiscount" type="number" min="0" max="100" step="0.5" value="0"></label>
+          <p class="hint">Applied to every product. You can still change the discount on any single line below.</p>
+        </div>
+      </div>
+
+      <!-- Step 3: products -->
+      <div class="card">
+        <div class="card-head"><span class="num">3</span><h2>Products</h2>
+          <div class="spacer"></div><span class="muted" id="itemCount"></span>
+        </div>
+        <div class="search-wrap">
+          <input id="search" autocomplete="off" spellcheck="false"
+                 placeholder="Type a product code (KB1011011) or words (basin mixer, wall hung, avaron rose gold)…">
+          <div id="results" class="results" hidden></div>
+        </div>
+        <div class="table-wrap">
+          <table class="items" id="items">
+            <thead><tr>
+              <th>#</th><th>Photo</th><th>Product</th><th class="r">MRP</th><th>Qty</th><th>Disc %</th>
+              <th class="r">Rate</th><th class="r">Total</th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty" id="emptyItems">No products yet. Search above and press <b>Enter</b> to add.</div>
+        </div>
+        <div class="totals">
+          <div><span>Total Amount</span><b id="tSub">₹0.00</b></div>
+          <div><span id="tGstLabel">Add GST @ 18%</span><b id="tGst">₹0.00</b></div>
+          <div class="grand"><span>Total Amount Including Taxes</span><b id="tGrand">₹0.00</b></div>
+        </div>
+      </div>
+
+      <!-- Step 4: output -->
+      <div class="card">
+        <div class="card-head"><span class="num">4</span><h2>Download</h2></div>
+        <div class="actions">
+          <button class="btn primary" id="btnPdf">⬇ Download PDF</button>
+          <button class="btn primary" id="btnXlsx">⬇ Download Excel</button>
+          <button class="btn" id="btnSave">Save quotation</button>
+          <span class="muted" id="saveState"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SAVED ============ -->
+  <section id="tab-saved" class="tab">
+    <div class="card">
+      <div class="card-head"><h2>Saved quotations</h2><div class="spacer"></div>
+        <input id="savedFilter" class="small-input" placeholder="Search customer / number…"></div>
+      <table class="list" id="savedTable"><thead><tr>
+        <th>No.</th><th>Date</th><th>Customer</th><th>Type</th><th class="r">Items</th><th class="r">Grand total</th><th></th>
+      </tr></thead><tbody></tbody></table>
+      <div class="empty" id="savedEmpty">No saved quotations yet.</div>
+    </div>
+  </section>
+
+  <!-- ============ PRICE LIST ============ -->
+  <section id="tab-prices" class="tab">
+    <div class="card">
+      <div class="card-head"><h2>Current price lists</h2></div>
+      <div id="plSummary" class="pl-summary"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Update price list from a new PDF</h2></div>
+      <p class="hint">Upload the new Kerovit price-list PDF. The app reads every product code and price, then shows
+        what changed. Nothing changes until you press <b>Apply update</b>.</p>
+      <div class="upload-row">
+        <label>Collection
+          <select id="upColl">
+            <option value="KLASSIC">Klassic price list</option>
+            <option value="AURUM">Aurum price list</option>
+            <option value="VANITY">Vanity catalogue</option>
+          </select>
+        </label>
+        <label>Price list name (shown on quotations)<input id="upName" placeholder="e.g. April 2027"></label>
+        <label class="file-btn btn primary">Choose PDF…<input id="upFile" type="file" accept="application/pdf" hidden></label>
+      </div>
+      <div id="upProgress" class="progress" hidden><div class="bar"></div><span></span></div>
+      <div id="upResult"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Browse &amp; edit products</h2><div class="spacer"></div>
+        <input id="plFilter" class="small-input" placeholder="Search code or name…"></div>
+      <p class="hint">Click an MRP to correct it by hand. Changes are saved on this computer.</p>
+      <table class="list" id="plTable"><thead><tr>
+        <th>Photo</th><th>Code</th><th>Product</th><th>Collection</th><th class="r">MRP</th>
+      </tr></thead><tbody></tbody></table>
+      <div class="muted center" id="plMore"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Backup</h2></div>
+      <p class="hint">Price updates are stored in this browser only. To give every computer the new prices, download the
+        encrypted file and replace <code>data/products.enc</code> in the GitHub repository with it.</p>
+      <div class="actions">
+        <button class="btn primary" id="btnExportEnc">⬇ Download for GitHub (encrypted)</button>
+        <button class="btn" id="btnExportDb">⬇ Download database (plain JSON, keep private)</button>
+        <label class="btn file-btn">⬆ Load database (JSON)<input id="importDb" type="file" accept=".json" hidden></label>
+        <button class="btn danger" id="btnResetDb">Reset to built-in price list</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="tab-settings" class="tab">
+    <div class="card">
+      <div class="card-head"><h2>Quotation settings</h2></div>
+      <div class="grid2">
+        <label>GST %<input id="sGst" type="number" min="0" step="0.5"></label>
+        <label>Next quotation number<input id="sNextNo" type="number" min="1"></label>
+        <label>Quotation number prefix<input id="sPrefix"></label>
+        <label class="check"><input id="sKeepRows" type="checkbox"> Keep all 24 product rows of the template, even when empty</label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Terms &amp; Conditions</h2><div class="spacer"></div>
+        <button class="btn ghost" id="btnResetTerms">Restore template text</button></div>
+      <p class="hint">One condition per line (11 lines, as in the template).</p>
+      <textarea id="sTerms" rows="12" class="mono"></textarea>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Closing message</h2></div>
+      <p class="hint">Printed at the bottom of every quotation.</p>
+      <textarea id="sClosing" rows="2" style="width:100%"></textarea>
+    </div>
+  </section>
+</main>
+
+<div id="lock" class="lock" hidden>
+  <form class="lock-card" id="lockForm">
+    <img src="assets/logo-kerovit.png" alt="Kerovit">
+    <h2>Quotation Maker</h2>
+    <p class="hint">Enter the password to open the price list.</p>
+    <input id="lockPw" type="password" autocomplete="current-password" placeholder="Password" required>
+    <label class="check"><input id="lockRemember" type="checkbox" checked> Remember on this computer</label>
+    <div class="lock-err" id="lockErr" hidden>Wrong password. Please try again.</div>
+    <button class="btn primary" type="submit">Unlock</button>
+  </form>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/pdf.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
