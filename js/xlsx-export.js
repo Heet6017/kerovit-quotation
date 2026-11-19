@@ -143,6 +143,23 @@ function setTextbox(drawing, name, label, value, { cx, cy, small } = {}) {
   });
 }
 
+function anchorRe(name) {
+  return new RegExp(`<xdr:oneCellAnchor>(?:(?!</xdr:oneCellAnchor>)[\\s\\S])*?name="${name}"[\\s\\S]*?</xdr:oneCellAnchor>`);
+}
+
+// copy a template text box under a new name (same look), placed at the given cell offset
+function addTextbox(drawing, src, name, id, col, colOff, rowOff) {
+  const m = drawing.match(anchorRe(src));
+  if (!m) return drawing;
+  const copy = m[0].replace(/<xdr:cNvPr id="\d+" name="[^"]*">[\s\S]*?<\/xdr:cNvPr>/, `<xdr:cNvPr id="${id}" name="${name}"/>`);
+  return drawing.replace("</xdr:wsDr>", moveTextbox(copy, name, col, colOff, rowOff) + "</xdr:wsDr>");
+}
+
+function moveTextbox(drawing, name, col, colOff, rowOff) {
+  return drawing.replace(anchorRe(name), (a) => a.replace(/<xdr:from>[\s\S]*?<\/xdr:from>/,
+    `<xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${colOff}</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>${rowOff}</xdr:rowOff></xdr:from>`));
+}
+
 function picAnchor(i, col, row, offX, offY, cx, cy, rid) {
   return `<xdr:oneCellAnchor><xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${offX}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${offY}</xdr:rowOff></xdr:from>` +
     `<xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${100 + i}" name="Product ${i + 1}"/>` +
@@ -173,7 +190,9 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   const S = [rowStyles(styles, true), rowStyles(styles, false)];
   // few products -> taller rows (bigger photos); many products -> template height of 50
-  const baseH = items.length && !settings.keepRows ? Math.max(50, Math.min(100, Math.floor(215 / items.length))) : 50;
+  const dealer = q.party === "dealer";
+  const ROW2_EXTRA = dealer ? 24 : 0;     // dealer details need a taller row 2 (4 lines)
+  const baseH = items.length && !settings.keepRows ? Math.max(50, Math.min(100, Math.floor((215 - ROW2_EXTRA) / items.length))) : 50;
   const dataXml = [];
   const heights = [];
   for (let i = 0; i < nRows; i++) {
@@ -272,6 +291,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
     after.push(x);
   }
 
+  if (dealer) rows[2] = rows[2].replace(/ ht="72"/, ` ht="${72 + ROW2_EXTRA}"`);
   const before = [1, 2, 3].map((r) => rows[r]).join("");
   sheet = sheet.replace(/<sheetData>[\s\S]*<\/sheetData>/, `<sheetData>${before}${dataXml.join("")}${after.join("")}</sheetData>`);
   sheet = sheet.replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g, (m, c1, r1, c2, r2) => {
@@ -297,12 +317,31 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   // ---- header text boxes (row 2)
   // left boxes span columns A–E (≈411 px), right boxes columns F–J (≈305 px)
   const addrLen = (q.address || "").length;
-  drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
-  drawing = setTextbox(drawing, "TextBox 4", "Customer Name: ", q.customer, { cx: 3800000 });
-  drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
-  drawing = setTextbox(drawing, "TextBox 6", "Project / Site Address: ", q.address,
-    { cx: 2450000, cy: addrLen > 20 ? 575000 : 264560, small: addrLen > 30 });
-  drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
+  if (dealer) {
+    // Dealer / Channel Partner: left = date, dealer, contact person, type; right = address, mobile, GSTIN
+    drawing = addTextbox(drawing, "TextBox 4", "TextBox 90", 90, 0, 38100, 0);
+    drawing = addTextbox(drawing, "TextBox 7", "TextBox 91", 91, 5, 95250, 0);
+    drawing = moveTextbox(drawing, "TextBox 4", 0, 38100, 292100);
+    drawing = moveTextbox(drawing, "TextBox 90", 0, 38100, 596900);
+    drawing = moveTextbox(drawing, "TextBox 5", 0, 25400, 901700);
+    drawing = moveTextbox(drawing, "TextBox 7", 5, 95250, 596900);
+    drawing = moveTextbox(drawing, "TextBox 91", 5, 95250, 901700);
+    drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 4", "Dealer Name: ", q.customer, { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 90", "Contact Person: ", q.contact, { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 6", "Address: ", q.address,
+      { cx: 2450000, cy: addrLen > 26 ? 575000 : 264560, small: addrLen > 40 });
+    drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
+    drawing = setTextbox(drawing, "TextBox 91", "GSTIN: ", (q.gstin || "").toUpperCase(), { cx: 2400000 });
+  } else {
+    drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 4", "Customer Name: ", q.customer, { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
+    drawing = setTextbox(drawing, "TextBox 6", "Project / Site Address: ", q.address,
+      { cx: 2450000, cy: addrLen > 20 ? 575000 : 264560, small: addrLen > 30 });
+    drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
+  }
   // Kerovit logos: fixed size at their true proportions (not stretched between cells), right edge in column J.
   // The T&C logo moves with the rows.
   drawing = drawing.replace(/<xdr:twoCellAnchor>((?:(?!<\/xdr:twoCellAnchor>)[\s\S])*?)<\/xdr:twoCellAnchor>/g, (m, inner) => {
@@ -341,7 +380,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   workbook = workbook.replace(/<calcPr ([^>]*)\/>/, (m, a) => a.includes("fullCalcOnLoad") ? m : `<calcPr ${a} fullCalcOnLoad="1"/>`);
   // repeat the column headings on later pages only when the product rows don't fit on page 1
   // (A4 with 0.5" margins ≈ 770 pt printable; rows 1–3 take 186.5 pt)
-  const productsFitPage1 = 186.5 + heights.reduce((a, h) => a + h, 0) <= 770;
+  const productsFitPage1 = 186.5 + ROW2_EXTRA + heights.reduce((a, h) => a + h, 0) <= 770;
   if (!productsFitPage1 && !workbook.includes("_xlnm.Print_Titles")) {
     workbook = workbook.replace("</sheets>", '</sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">Sheet1!$3:$3</definedName></definedNames>');
   }

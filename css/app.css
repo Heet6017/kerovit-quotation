@@ -96,6 +96,10 @@ textarea { resize: vertical; }
 }
 .type:hover { border-color: var(--navy); color: var(--navy); }
 .type.active { border-color: var(--navy); background: var(--navy); color: #fff; }
+.party-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.types.party { grid-template-columns: repeat(2, minmax(200px, 1fr)); margin-bottom: 0; flex: 1; }
+.dealer-only { display: none; }
+.is-dealer .dealer-only { display: flex; }
 .disc-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
 .disc-row label { width: 160px; }
 .disc-row input { font-size: 18px; font-weight: 700; }

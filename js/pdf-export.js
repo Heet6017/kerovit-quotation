@@ -83,7 +83,8 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   y += h1;
 
   // ---------------------------------------------------------------- row 2: customer text boxes
-  const h2 = 72 * RK;
+  const dealer = q.party === "dealer";
+  const h2 = (dealer ? 96 : 72) * RK;
   fill(M, y, RIGHT - M, h2, C.hdr2);
   const tb = (col, offEmu, rowOffEmu, label, value, maxW) => {
     const x = colX[col] + (offEmu / EMU_PX) * K + 9.6 * K;
@@ -107,11 +108,21 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     }
   };
   const leftW = colX[5] - M - 12, rightW = RIGHT - colX[5] - 12;
-  tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
-  tb(0, 38100, 317500, "Customer Name: ", q.customer, leftW);
-  tb(0, 25400, 615950, "Quotation Type: ", q.type, leftW);
-  tb(5, 69850, 0, "Project / Site Address: ", q.address, rightW);
-  tb(5, 95250, 584200, "Mobile Number: ", q.mobile, rightW);
+  if (dealer) {
+    tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
+    tb(0, 38100, 292100, "Dealer Name: ", q.customer, leftW);
+    tb(0, 38100, 596900, "Contact Person: ", q.contact, leftW);
+    tb(0, 25400, 901700, "Quotation Type: ", q.type, leftW);
+    tb(5, 69850, 0, "Address: ", q.address, rightW);
+    tb(5, 95250, 596900, "Mobile Number: ", q.mobile, rightW);
+    tb(5, 95250, 901700, "GSTIN: ", (q.gstin || "").toUpperCase(), rightW);
+  } else {
+    tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
+    tb(0, 38100, 317500, "Customer Name: ", q.customer, leftW);
+    tb(0, 25400, 615950, "Quotation Type: ", q.type, leftW);
+    tb(5, 69850, 0, "Project / Site Address: ", q.address, rightW);
+    tb(5, 95250, 584200, "Mobile Number: ", q.mobile, rightW);
+  }
   y += h2;
 
   // ---------------------------------------------------------------- row 3: table header (repeated on each page)
