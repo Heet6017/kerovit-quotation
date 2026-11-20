@@ -256,6 +256,13 @@ def generic_page(page, coll, state):
             name = clean(f"{name} ({extra_name})")
         codelist = expand_codes(ctext)
         flag = "Price looks mis-printed in PDF - verify" if p.get("flag") else ""
+        two = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+) / ([A-Z][a-z]+ [A-Z][a-z]+)$", name)
+        if coll == "KLASSIC" and two and len(codelist) == 2 and len(p["vals"]) in (1, 2):
+            # "KA870009 / KA870010  ... Half Thread / Full Thread  ₹ 365": two products, one row each
+            for i, cd in enumerate(codelist):
+                items.append(dict(code=cd, alt_codes=[], name=clean(name[:two.start()]), details=details,
+                                  variant=two.group(i + 1), mrp=p["vals"][min(i, len(p["vals"]) - 1)], _img=img, flag=flag))
+            continue
         if len(p["vals"]) > 1 and len(codelist) == len(p["vals"]):
             # shorthand like KA640007/08/09 with 3 sizes and 3 prices -> one item each
             sizes = re.findall(r'(\d+\s*["\u201d]\s*-\s*[\dX\. ]+mm)', name)
@@ -683,8 +690,16 @@ def main():
             if len(items) == 1:
                 rect = pymupdf.Rect(40, 520, W - 40, H - 40)
             else:
+                # several vanities side by side: crop this product's own column (between the code
+                # positions), below the mood photo, above its name, without the QR code
+                xs = sorted(next(l["x0"] for l in L if l["t"].rstrip("*") == o["code"]) for o in items)
                 cx = next(l["x0"] for l in L if l["t"].rstrip("*") == it["code"])
-                rect = pymupdf.Rect(40 if cx < W / 2 else W / 2, 520, W / 2 if cx < W / 2 else W - 40, it["_y"] - 22)
+                i = xs.index(cx)
+                x0 = 40 if i == 0 else cx - 14
+                x1 = W - 40 if i == len(xs) - 1 else xs[i + 1] - 14
+                qr = [r.y0 for r in (pymupdf.Rect(q["bbox"]) for q in page.get_image_info())
+                      if r.width < 60 and x0 < r.x0 < x1 and r.y0 > 600]
+                rect = pymupdf.Rect(x0, 538, x1, min([it["_y"] - 22] + [y - 4 for y in qr]))
             rect.tag_textless = True
             nm = it["name"] or st.get("last_title", "")
             details = "; ".join(x for x in [f"Cabinet {it['cab']}" if it["cab"] else "", f"Mirror {it['mir']}" if it["mir"] else "", it["feat"]] if x)

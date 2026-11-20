@@ -269,6 +269,13 @@ function genericPage(pg, coll, st) {
     if (extraName) name = clean(`${name} (${extraName})`);
     let codelist = expandCodes(ctext);
     const flag = p.flag ? "Price looks mis-printed in PDF - verify" : "";
+    const two = name.match(/([A-Z][a-z]+ [A-Z][a-z]+) \/ ([A-Z][a-z]+ [A-Z][a-z]+)$/);
+    if (coll === "KLASSIC" && two && codelist.length === 2 && (p.vals.length === 1 || p.vals.length === 2)) {
+      // "KA870009 / KA870010 ... Half Thread / Full Thread ₹ 365": two products, one row each
+      codelist.forEach((cd, i) => items.push({ code: cd, alt_codes: [], name: clean(name.slice(0, two.index)), details,
+        variant: two[i + 1], mrp: p.vals[Math.min(i, p.vals.length - 1)], img, flag }));
+      return;
+    }
     if (p.vals.length > 1 && codelist.length === p.vals.length) {
       let sizes = name.match(/\d+\s*["”]\s*-\s*[\dX\. ]+mm/g) || [];
       let base = clean(name.replace(/\d+\s*["”]\s*-\s*[\dX\. ]+mm\)?/g, ""));
@@ -410,11 +417,16 @@ function vanityPage(pg) {
     const feat = near.find((l) => l.t.includes("Technology") || l.t.includes("LED"));
     out.push({ code: c.t.replace(/\*$/, ""), name, cab, mir, feat: feat ? feat.t : "", mrp: toInt(prices[0].t.match(new RegExp(NUM))[0]), c });
   }
+  // several vanities side by side: each photo is its own column (between the code positions),
+  // below the mood photo and above the name, without the QR code (same as tools/extract.py)
+  const xs = out.map((it) => it.c.x0).sort((a, b) => a - b);
   return out.map((it) => {
     const H = pg.H;
-    const img = out.length === 1 ? R(40, 520, W - 40, it.c.y0 - 25 > 600 ? it.c.y0 - 25 : H - 40)
-      : R(it.c.x0 < W / 2 ? 40 : W / 2, 520, it.c.x0 < W / 2 ? W / 2 : W - 40, it.c.y0 - 22);
-    return { ...it, img };
+    if (out.length === 1) return { ...it, img: R(40, 520, W - 40, it.c.y0 - 25 > 600 ? it.c.y0 - 25 : H - 40) };
+    const i = xs.indexOf(it.c.x0);
+    const x0 = i === 0 ? 40 : it.c.x0 - 14, x1 = i === xs.length - 1 ? W - 40 : xs[i + 1] - 14;
+    const qr = pg.imgs.filter((r) => rw(r) < 60 && r.x0 > x0 && r.x0 < x1 && r.y0 > 600).map((r) => r.y0 - 4);
+    return { ...it, img: R(x0, 538, x1, Math.min(it.c.y0 - 22, ...qr)) };
   });
 }
 
