@@ -14,6 +14,7 @@ const COL_E_PX = 100;          // photo column widened to 14.29 (≈100 px); Qty
 const COLS_XML = '<col min="5" max="5" width="14.2890625" style="1" customWidth="1"/><col min="6" max="6" width="8.7265625" style="1"/>' +
   '<col min="7" max="8" width="6" style="1" customWidth="1"/><col min="9" max="16384" width="8.7265625" style="1"/>';
 
+const CREAM = "FFFFF9F3", NAVY = "FF1F487C";
 const xmlEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const colOf = (i) => "ABCDEFGHIJK"[i];
 
@@ -30,12 +31,18 @@ class Styles {
     this.cache = new Map();
     this.xfs = m[2].match(/<xf [\s\S]*?(?:\/>|<\/xf>)/g);
     this.fontCount = Number(xml.match(/<fonts count="(\d+)"/)[1]);
-    // light-blue fills for the alternating product rows
-    const nFills = Number(this.xml.match(/<fills count="(\d+)"/)[1]);
+    // approved format: cream page instead of the template's light blues, navy bars
     const solid = (rgb) => `<fill><patternFill patternType="solid"><fgColor rgb="${rgb}"/><bgColor indexed="64"/></patternFill></fill>`;
-    this.xml = this.xml.replace(/<fills count="\d+"/, `<fills count="${nFills + 2}"`)
-      .replace("</fills>", solid("FFF4F8FD") + solid("FFE3EDF9") + "</fills>");
-    this.rowFill = { even: nFills, odd: nFills + 1 };
+    let fi = -1;
+    this.xml = this.xml.replace(/<fills count="\d+">([\s\S]*?)<\/fills>/, (m, inner) => m.replace(inner,
+      inner.replace(/<fill>[\s\S]*?<\/fill>/g, (f) => {
+        fi++;
+        if (fi === 3 || fi === 4 || fi === 5) return solid(CREAM);   // light blue / lavender fills
+        if (fi === 6) return `<fill><patternFill patternType="solid"><fgColor rgb="${NAVY}"/><bgColor rgb="${NAVY}"/></patternFill></fill>`;
+        return f;
+      })));
+    this.cream = 3; this.navy = 6;
+    this.rowFill = { even: 3, odd: 3 };
     // add the rupee number format
     this.xml = this.xml.replace(/<numFmts count="(\d+)">/, (_, n) => `<numFmts count="${Number(n) + 2}">`)
       .replace("</numFmts>", `<numFmt numFmtId="165" formatCode="${INR_FMT}"/><numFmt numFmtId="166" formatCode="${INR_FMT0}"/></numFmts>`);
@@ -125,22 +132,21 @@ function shiftRowXml(rowXml, delta) {
     .replace(/ r="([A-Z]+)(\d+)"/g, (_, c, r) => ` r="${c}${Number(r) + delta}"`);
 }
 
-function textboxPara(label, value, small) {
-  const lab = `<a:r><a:rPr lang="en-US" sz="1100" b="1"><a:solidFill><a:schemeClr val="tx2"/></a:solidFill></a:rPr><a:t>${xmlEsc(label)}</a:t></a:r>`;
-  const val = value ? `<a:r><a:rPr lang="en-US" sz="${small ? 950 : 1100}" b="0"><a:solidFill><a:srgbClr val="1C2733"/></a:solidFill></a:rPr><a:t>${xmlEsc(value)}</a:t></a:r>` : "";
-  return `<a:p>${lab}${val}</a:p>`;
+/** header detail text box: black bold label, value after it, wraps inside the box width */
+function infoBox(id, col, colOff, row, rowOffPt, cx, cy, label, value, valueSz = 1100) {
+  const run = (t, b) => `<a:r><a:rPr lang="en-US" sz="${b ? 1100 : valueSz}" b="${b ? 1 : 0}"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>` +
+    `<a:latin typeface="Calibri"/></a:rPr><a:t>${xmlEsc(t)}</a:t></a:r>`;
+  return `<xdr:oneCellAnchor><xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${colOff}</xdr:colOff><xdr:row>${row}</xdr:row>` +
+    `<xdr:rowOff>${Math.round(rowOffPt * EMU_PT)}</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/>` +
+    `<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="${id}" name="Info ${id}"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr>` +
+    `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></xdr:spPr>` +
+    `<xdr:txBody><a:bodyPr vertOverflow="clip" horzOverflow="clip" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"/>` +
+    `<a:lstStyle/><a:p>${run(label, true)}${value ? run(value, false) : ""}</a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:oneCellAnchor>`;
 }
 
-function setTextbox(drawing, name, label, value, { cx, cy, small } = {}) {
-  const re = new RegExp(`<xdr:oneCellAnchor>(?:(?!</xdr:oneCellAnchor>)[\\s\\S])*?name="${name}"[\\s\\S]*?</xdr:oneCellAnchor>`);
-  return drawing.replace(re, (anchor) => {
-    let a = anchor.replace(/<a:p>[\s\S]*<\/a:p>/, textboxPara(label, value, small));
-    if (cx || cy) {
-      a = a.replace(/<xdr:ext cx="(\d+)" cy="(\d+)"\/>/, (_, x, y) => `<xdr:ext cx="${cx || x}" cy="${cy || y}"/>`)
-        .replace(/<a:ext cx="(\d+)" cy="(\d+)"\/>/, (_, x, y) => `<a:ext cx="${cx || x}" cy="${cy || y}"/>`);
-    }
-    return a;
-  });
+/** insert a new row 2: every row from 2 down moves one row lower (cells, merges, formulas, drawings) */
+function shiftRefs(s) {
+  return s.replace(/(\$?)([A-K])(\$?)(\d+)\b/g, (m, d1, c, d2, r) => Number(r) >= 2 ? `${d1}${c}${d2}${Number(r) + 1}` : m);
 }
 
 /** rich-text runs from "**bold**" markup */
@@ -217,63 +223,75 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   // ---- rows after the products (spacer, totals, T&C) shift by `delta`
   const tot = calcQuote(q, settings.gst);
 
-  // Totals, one below another in the template's style (label right-aligned across A:I, amount in J),
-  // then the amount in words across A:J. Template rows 29–31 become 6 rows, so the rows below move down 3.
-  const EXTRA = 3;
-  const firstSum = 29 + delta;
+  // Totals one below another (label right-aligned across A:I, amount in the Total column J),
+  // Net Amount on a navy bar, then the amount in words. They start right under the products
+  // (the template's white spacer row 28 is dropped).
+  const firstSum = SPACER_ROW + delta;
   const summaryMerges = [];
   const SUM = [
     ["Total Quantity", `SUM(G${FIRST_DATA_ROW}:G${lastData})`, tot.qty, 0],
     ["Total MRP", `SUMPRODUCT(F${FIRST_DATA_ROW}:F${lastData},G${FIRST_DATA_ROW}:G${lastData})`, tot.mrpTotal, 165],
-    ["Total Taxable Amt", `SUM(J${FIRST_DATA_ROW}:J${lastData})`, tot.sub, 165],
-    [`Total TAX (GST ${settings.gst}%)`, `ROUND(I${firstSum + 2}*${settings.gst}/100,2)`, tot.gst, 165],
-    ["Net Amt", `ROUND(I${firstSum + 2}+I${firstSum + 3},0)`, tot.net, 166],
+    ["Total Taxable Amount", `SUM(J${FIRST_DATA_ROW}:J${lastData})`, tot.sub, 165],
+    ["Total Tax / GST", `ROUND(J${firstSum + 2}*${settings.gst}/100,2)`, tot.gst, 165],
+    ["Net Amount", `ROUND(J${firstSum + 2}+J${firstSum + 3},0)`, tot.net, 166],
   ];
+  const fBold11 = styles.addFont('<font><b/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>');
+  const fNet = styles.addFont('<font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
   function summaryRows() {
     const out = [];
     SUM.forEach(([label, f, v, fmt], i) => {
-      const nr = firstSum + i, first = i === 0;
-      // template styles: first total row (29) has the thick top line, the others are like row 30
-      const sA = first ? 29 : 31, sMid = first ? 30 : 32, sJ = first ? 6 : 7;
-      const sV = styles.withFmt(sJ, fmt);
+      const nr = firstSum + i, net = i === SUM.length - 1;
+      const top = i === 0 ? "medium" : "thin";
+      const font = net ? fNet : fBold11, fill = net ? styles.navy : styles.cream;
+      const sA = styles.xf({ font, fill, border: styles.border("medium", "none", top, "thin"), h: "right" });
+      const sMid = styles.xf({ font, fill, border: styles.border("none", "none", top, "thin"), h: "right" });
+      const sI = styles.xf({ font, fill, border: styles.border("none", "thin", top, "thin"), h: "right" });
+      const sJ = styles.xf({ numFmt: fmt, font, fill, border: styles.border("thin", "medium", top, "thin"), h: "right", shrink: true });
       const cells = [strCell(`A${nr}`, sA, label), ..."BCDEFGH".split("").map((c) => blankCell(`${c}${nr}`, sMid)),
-        fCell(`I${nr}`, sV, f, v), blankCell(`J${nr}`, sV)];
-      summaryMerges.push(`A${nr}:H${nr}`, `I${nr}:J${nr}`);
-      out.push(`<row r="${nr}" spans="1:11" ht="17" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
+        blankCell(`I${nr}`, sI), fCell(`J${nr}`, sJ, f, v)];
+      summaryMerges.push(`A${nr}:I${nr}`);
+      out.push(`<row r="${nr}" spans="1:11" ht="${net ? 22 : 18}" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
     });
-    // amount in words: last line of the block, thick bottom line like template row 31
+    // amount in words: last line of the block, medium line below
     const nr = firstSum + SUM.length;
-    const sw = styles.xf({ font: styles.attr(33, "fontId"), fill: styles.attr(33, "fillId"), border: styles.attr(33, "borderId"), h: "left", v: "center" });
-    const run = (s, bold) => `<r><rPr>${bold ? "<b/>" : ""}<sz val="11"/><rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(s)}</t></r>`;
-    const rich = run("Amount (In Words): ", true) + run(amountInWords(tot.net), false);
+    const sw = styles.xf({ fill: styles.cream, border: styles.border("medium", "none", "thin", "medium"), h: "left", v: "center" });
+    const sm = styles.xf({ fill: styles.cream, border: styles.border("none", "none", "thin", "medium") });
+    const se = styles.xf({ fill: styles.cream, border: styles.border("none", "medium", "thin", "medium") });
+    const run = (s, bold) => `<r><rPr>${bold ? "<b/>" : ""}<sz val="11"/><color rgb="FF000000"/><rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(s)}</t></r>`;
+    const rich = run("Amount (in words): ", true) + run(amountInWords(tot.net), false);
     const cells = [`<c r="A${nr}" s="${sw}" t="inlineStr"><is>${rich}</is></c>`,
-      ..."BCDEFGHI".split("").map((c) => blankCell(`${c}${nr}`, 34)), blankCell(`J${nr}`, 8)];
+      ..."BCDEFGHI".split("").map((c) => blankCell(`${c}${nr}`, sm)), blankCell(`J${nr}`, se)];
     summaryMerges.push(`A${nr}:J${nr}`);
-    out.push(`<row r="${nr}" spans="1:11" ht="18" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
+    out.push(`<row r="${nr}" spans="1:11" ht="24" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
     return out;
   }
   // ---- T&C (title + one row per line), then the "made by" details with the Kerovit logo, then the banner
-  const fillTC = styles.attr(23, "fillId");
-  const bL = styles.attr(23, "borderId"), bR = styles.attr(25, "borderId");
-  const tcA = styles.xf({ fill: fillTC, border: bL, v: "center" });
+  const fillTC = styles.cream;
+  const bL = styles.border("medium", "none", "none", "none"), bR = styles.border("none", "medium", "none", "none");
+  const tcA = styles.xf({ fill: fillTC, border: bL, v: "top", wrap: true });
   const tcMid = styles.xf({ fill: fillTC, border: 0, v: "center" });
   const tcJ = styles.xf({ fill: fillTC, border: bR, v: "center" });
-  const tcTitle = styles.xf({ font: styles.addFont('<font><b/><u/><sz val="14"/><color rgb="FF1F3864"/><name val="Calibri"/><family val="2"/></font>'),
-    fill: fillTC, border: bL, h: "center", v: "center" });
-  const tailRow = (nr, ht, cellA, sA) => `<row r="${nr}" spans="1:11" ht="${ht}" customHeight="1" x14ac:dyDescent="0.35">` +
+  const fTitle = styles.addFont('<font><b/><u/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
+  const tcTitle = styles.xf({ font: fTitle, fill: styles.navy, border: styles.border("medium", "none", "medium", "medium"), h: "left", v: "center" });
+  const tcTitleMid = styles.xf({ fill: styles.navy, border: styles.border("none", "none", "medium", "medium") });
+  const tcTitleJ = styles.xf({ fill: styles.navy, border: styles.border("none", "medium", "medium", "medium") });
+  const tailRow = (nr, ht, cellA, sA, sM = tcMid, sJ = tcJ) => `<row r="${nr}" spans="1:11" ht="${ht}" customHeight="1" x14ac:dyDescent="0.35">` +
     (cellA ? `<c r="A${nr}" s="${sA}" t="inlineStr"><is>${cellA}</is></c>` : blankCell(`A${nr}`, sA)) +
-    "BCDEFGHI".split("").map((c) => blankCell(`${c}${nr}`, tcMid)).join("") + blankCell(`J${nr}`, tcJ) + "</row>";
+    "BCDEFGHI".split("").map((c) => blankCell(`${c}${nr}`, sM)).join("") + blankCell(`J${nr}`, sJ) + "</row>";
   const tailMerges = [];
-  const tcStart = 32 + delta + EXTRA;
+  const tcStart = firstSum + SUM.length + 1;
   const tail = [];
   let tr = tcStart;
-  tail.push(tailRow(tr, 26, richRuns(TERMS_TITLE, { sz: 14, color: "FF1F3864", bold: true }).replace("<b/>", "<b/><u/>"), tcTitle));
+  tail.push(tailRow(tr, 24, richRuns(" " + TERMS_TITLE + " ", { sz: 14, color: "FFFFFFFF", bold: true }).replace("<b/>", "<b/><u/>"),
+    tcTitle, tcTitleMid, tcTitleJ));
   tailMerges.push(`A${tr}:J${tr}`); tr++;
-  for (const line of settings.terms) {
-    tail.push(tailRow(tr, 18, richRuns(line, { sz: 11.5 }), tcA));
+  tail.push(tailRow(tr, 5, "", tcA)); tr++;
+  // one paragraph per point; long points wrap (row height from an estimate of the wrapped lines)
+  for (const line of settings.terms.map((s) => s.trim()).filter(Boolean)) {
+    const n = lines(line.replace(/\*\*/g, ""), 112);
+    tail.push(tailRow(tr, n * 16 + 6, richRuns(line, { sz: 12 }), tcA));
     tailMerges.push(`A${tr}:J${tr}`); tr++;
   }
-  tail.push(tailRow(tr, 8, "", tcA)); tr++;
   // details: thin line above, two rows of "Label : value" pairs (A:D and E:G), logo in H:J
   const maker = q.maker === "dealer" ? "dealer" : "company";
   const labels = MAKER_FIELDS[maker], info = Array.isArray(q.makerInfo) ? q.makerInfo : [];
@@ -293,16 +311,15 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   const after = [];
   for (let r = SPACER_ROW; r <= LAST_ROW; r++) {
-    if (r === 29) { after.push(...summaryRows()); continue; }
-    if (r === 30 || r === 31) continue;
-    if (r >= 32 && r < 44) { if (r === 32) after.push(...tail); continue; }
+    if (r === SPACER_ROW) { after.push(...summaryRows(), ...tail); continue; }
+    if (r < 44) continue;
     const shift = r === 44 ? bannerRow - 44 : delta;
     let x = shiftRowXml(rows[r], shift);
     const nr = r + shift;
     if (r === 44 && settings.closing) {
       // closing banner in the bottom row: white bold text on navy, "Bathrooms You Desire" larger
       const fid = styles.addFont('<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>');
-      const navy = 6;   // template fill #1F4E78 (table heading colour)
+      const navy = styles.navy;
       const gs = styles.xf({ font: fid, fill: navy, border: styles.attr(18, "borderId"), h: "center", v: "center", wrap: true });
       const mid = styles.xf({ font: fid, fill: navy, border: styles.attr(19, "borderId"), v: "center" });
       const end = styles.xf({ font: fid, fill: navy, border: styles.attr(20, "borderId"), v: "center" });
@@ -316,11 +333,22 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
     after.push(x);
   }
 
-  const before = [1, 2, 3].map((r) => rows[r]).join("");
+  // header: logos row a little lower; details row tall enough for three lines each side
+  // (a long site address takes two lines and pushes Mobile Number / Quotation No. down)
+  const addrTwo = (q.address || "").length > 24;
+  const LINE = 23, ADDR_EXTRA = addrTwo ? 14 : 0;
+  const infoH = 2 * LINE + ADDR_EXTRA + 24;
+  const row1 = rows[1].replace(/ ht="[\d.]+"/, ' ht="64"');
+  const row2 = rows[2].replace(/ ht="[\d.]+"/, ` ht="${infoH}"`);
+  // "Disc. %" on one line: same look as the other headings, shrunk to the narrow column
+  const row3 = rows[3].replace(/<c r="H3" s="(\d+)" t="s"><v>23<\/v><\/c>/, (m, s) => strCell("H3",
+    styles.xf({ font: styles.attr(+s, "fontId"), fill: styles.attr(+s, "fillId"), border: styles.attr(+s, "borderId"), h: "center", shrink: true }),
+    "Disc. %"));
+  const before = row1 + row2 + row3;
   sheet = sheet.replace(/<sheetData>[\s\S]*<\/sheetData>/, `<sheetData>${before}${dataXml.join("")}${after.join("")}</sheetData>`);
   sheet = sheet.replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g, (m, c1, r1, c2, r2) => {
     const a = Number(r1), b = Number(r2);
-    if (a >= 29) return "";          // totals and T&C rows are rebuilt above
+    if (a >= SPACER_ROW) return "";  // totals and T&C rows are rebuilt above
     const sh = a >= SPACER_ROW ? delta : 0;
     return sh ? `<mergeCell ref="${c1}${a + sh}:${c2}${b + sh}"/>` : m;
   });
@@ -335,15 +363,22 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   sheet = sheet.replace(/<pageMargins [^>]*\/>/, '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>');
   sheet = sheet.replace(/<selection [^>]*\/>/, '<selection activeCell="A1" sqref="A1"/>');
 
-  // ---- header text boxes (row 2)
-  // left boxes span columns A–E (≈411 px), right boxes columns F–J (≈305 px)
-  const addrLen = (q.address || "").length;
-  drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
-  drawing = setTextbox(drawing, "TextBox 4", "Customer Name: ", q.customer, { cx: 3800000 });
-  drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
-  drawing = setTextbox(drawing, "TextBox 6", "Project / Site Address: ", q.address,
-    { cx: 2450000, cy: addrLen > 20 ? 575000 : 264560, small: addrLen > 30 });
-  drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
+  // ---- header details (row 2): the template's text boxes are replaced by six new ones,
+  // left (columns A–E): Quotation Date / Customer Name / Quotation Type,
+  // right (columns F–J): Project / Site Address / Mobile Number / Quotation No.
+  drawing = drawing.replace(/<xdr:oneCellAnchor>(?:(?!<\/xdr:oneCellAnchor>)[\s\S])*?name="TextBox \d+"[\s\S]*?<\/xdr:oneCellAnchor>/g, "");
+  const boxH = 17 * EMU_PT, LX = 3900000, RX = 2700000;
+  const y0 = 9;
+  drawing = drawing.replace("</xdr:wsDr>", [
+    infoBox(201, 0, 45000, 1, y0, LX, boxH, "Quotation Date: ", fmtDate(q.date)),
+    infoBox(202, 0, 45000, 1, y0 + LINE + ADDR_EXTRA, LX, boxH, "Customer Name: ", q.customer),
+    infoBox(203, 0, 45000, 1, y0 + 2 * LINE + ADDR_EXTRA, LX, boxH, "Quotation Type: ", q.type),
+    infoBox(204, 5, 45000, 1, y0, RX, boxH + ADDR_EXTRA * EMU_PT, "Project / Site Address: ", q.address,
+      // long addresses get a smaller font so they stay within two lines
+      Math.max(800, Math.min(1100, Math.floor(1100 * 62 / Math.max(62, (q.address || "").length + 24) / 50) * 50))),
+    infoBox(205, 5, 45000, 1, y0 + LINE + ADDR_EXTRA, RX, boxH, "Mobile Number: ", q.mobile),
+    infoBox(206, 5, 45000, 1, y0 + 2 * LINE + ADDR_EXTRA, RX, boxH, "Quotation No.: ", q.number),
+  ].join("") + "</xdr:wsDr>");
   // Kerovit logos: fixed size at their true proportions (not stretched between cells), right edge in column J.
   // The T&C logo moves with the rows.
   drawing = drawing.replace(/<xdr:twoCellAnchor>((?:(?!<\/xdr:twoCellAnchor>)[\s\S])*?)<\/xdr:twoCellAnchor>/g, (m, inner) => {
@@ -382,10 +417,26 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   workbook = workbook.replace(/<calcPr ([^>]*)\/>/, (m, a) => a.includes("fullCalcOnLoad") ? m : `<calcPr ${a} fullCalcOnLoad="1"/>`);
   // repeat the column headings on later pages only when the product rows don't fit on page 1
   // (A4 with 0.5" margins ≈ 770 pt printable; rows 1–3 take 186.5 pt)
-  const productsFitPage1 = 186.5 + heights.reduce((a, h) => a + h, 0) <= 770;
+  const productsFitPage1 = 64 + 22 + infoH + 29 + heights.reduce((a, h) => a + h, 0) <= 770;
   if (!productsFitPage1 && !workbook.includes("_xlnm.Print_Titles")) {
-    workbook = workbook.replace("</sheets>", '</sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">Sheet1!$3:$3</definedName></definedNames>');
+    // the column headings are row 4 once the QUOTATION bar is inserted below
+    workbook = workbook.replace("</sheets>", '</sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">Sheet1!$4:$4</definedName></definedNames>');
   }
+
+  // ---- navy "QUOTATION" bar as a new row 2 (everything from row 2 down moves one row lower)
+  const qStyle = styles.xf({ font: fNet, fill: styles.navy, border: styles.border("medium", "none", "medium", "medium"), h: "center" });
+  const qMid = styles.xf({ fill: styles.navy, border: styles.border("none", "none", "medium", "medium") });
+  const qEnd = styles.xf({ fill: styles.navy, border: styles.border("none", "medium", "medium", "medium") });
+  const qRow = `<row r="2" spans="1:11" ht="22" customHeight="1" x14ac:dyDescent="0.35">${strCell("A2", qStyle, "QUOTATION")}` +
+    "BCDEFGHI".split("").map((c) => blankCell(`${c}2`, qMid)).join("") + blankCell("J2", qEnd) + "</row>";
+  sheet = sheet.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g, (m, r) => Number(r) < 2 ? m
+    : shiftRowXml(m, 1).replace(/<f>([^<]*)<\/f>/g, (_, f) => `<f>${shiftRefs(f)}</f>`));
+  sheet = sheet.replace(/(<row r="1"[^>]*>[\s\S]*?<\/row>)/, `$1${qRow}`);
+  sheet = sheet.replace(/<mergeCell ref="([^"]+)"\/>/g, (_, ref) => `<mergeCell ref="${shiftRefs(ref)}"/>`)
+    .replace("</mergeCells>", '<mergeCell ref="A2:J2"/></mergeCells>');
+  sheet = sheet.replace(/<mergeCells count="\d+">/, () => `<mergeCells count="${(sheet.match(/<mergeCell ref=/g) || []).length}">`);
+  sheet = sheet.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="A1:K${bannerRow + 1}"/>`);
+  drawing = drawing.replace(/<xdr:row>(\d+)<\/xdr:row>/g, (m, r) => Number(r) >= 1 ? `<xdr:row>${Number(r) + 1}</xdr:row>` : m);
 
   zip.file("xl/worksheets/sheet1.xml", sheet);
   zip.file("xl/drawings/drawing1.xml", drawing);

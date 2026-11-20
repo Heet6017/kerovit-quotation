@@ -193,9 +193,16 @@ export async function warmImageCache(list) {
 
 // ---------------------------------------------------------------- settings
 
-// "**...**" = bold, leading spaces = indented continuation line
-export const TERMS_TITLE = "Mandatory Terms & Conditions for Quotation";
+// one paragraph per line (long lines wrap on the quotation); "**...**" = bold
+export const TERMS_TITLE = "Terms & Conditions";
 export const DEFAULT_TERMS = [
+  "**Validity :** The quoted rates are valid for 30 days from the date of quotation.",
+  "**Delivery:** Delivery is subject to product availability and confirmation of order and applicable payment terms.",
+  "**After-Sales Service:** We provide 10 years* of after-sales service unmatched in the industry,  with servicing carried out by our **own trained Kerovit technicians**",
+  "**Queries:** for any queries about this quotation or to request changes , please feel free to contact  your Kerovit representative using the details below",
+];
+// the previous default (still used by computers that never edited it) -> replaced by the text above
+const PREV_DEFAULT_TERMS = [
   "**Validity :**  The Rates will be valid till 30 Days From the Date of Quotation",
   "**Delivery:**  is subject to product availability and confirmed order/payment terms.",
   "**Warranty :** We provide 10 years of after-sales service unmatched in the industry,",
@@ -203,6 +210,7 @@ export const DEFAULT_TERMS = [
   "**Queries:**  for any queries about this quotation or to request changes , please feel free to contact",
   "        your Kerovit representative using the details below",
 ];
+const sameTerms = (a, b) => a.map((s) => s.trim()).filter(Boolean).join("\n") === b.map((s) => s.trim()).filter(Boolean).join("\n");
 const OLD_TERMS_START = "1. Prices are based on the prevailing";
 export const OLD_DEFAULT_TERMS = [
   "1. Prices are based on the prevailing October 2026 price list and are subject to change as applicable.",
@@ -236,6 +244,7 @@ export function getSettings() {
     // the first generic 11-line terms -> the new terms (unless they were edited)
     if (Array.isArray(s.terms) && s.terms.join("\n") === OLD_DEFAULT_TERMS.join("\n")) delete s.terms;
     if (Array.isArray(s.terms) && s.terms[0] && s.terms[0].startsWith(OLD_TERMS_START) && s.terms.length === 11) delete s.terms;
+    if (Array.isArray(s.terms) && sameTerms(s.terms, PREV_DEFAULT_TERMS)) delete s.terms;
     return { ...DEFAULT_SETTINGS, ...s, terms: Array.isArray(s.terms) && s.terms.length ? s.terms : DEFAULT_TERMS };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }

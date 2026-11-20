@@ -12,11 +12,10 @@ const K = (A4.w - 2 * M) / TOTAL_PX;            // pt per Excel pixel (≈ Excel
 const RK = K * 96 / 72;                         // template row points -> PDF points
 const EMU_PX = 9525;
 
+// colours of the approved quotation format: cream page, navy bars, black labels
 const C = {
-  navy: [31, 78, 120], tx2: [31, 73, 125], tcHead: [23, 54, 93], ink: [28, 39, 51],
-  even: [244, 248, 253], odd: [227, 237, 249],      // light blues for the alternating product rows
-  band: [231, 239, 255], hdr2: [243, 243, 255],
-  totals: [198, 217, 240], white: [255, 255, 255], line: [0, 0, 0],
+  navy: [31, 72, 124], ink: [0, 0, 0], label: [0, 0, 0],
+  cream: [255, 249, 243], white: [255, 255, 255], line: [0, 0, 0],
 };
 const THIN = 0.45, MEDIUM = 1.0;
 
@@ -69,8 +68,8 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   let pageTop = M;
 
   // ---------------------------------------------------------------- row 1: logos
-  const h1 = 85.5 * RK;
-  fill(M, y, RIGHT - M, h1, C.band);
+  const h1 = 64 * RK;
+  fill(M, y, RIGHT - M, h1, C.cream);
   const pic = (img, alias, c0, x0, y0, c1, x1, y1) => {
     if (!img) return;
     const ax = anchorX(c0, x0), ay = anchorY(y, y0);
@@ -82,46 +81,65 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   box(M, y, RIGHT - M, h1, MEDIUM);
   y += h1;
 
-  // ---------------------------------------------------------------- row 2: customer text boxes
-  const h2 = 72 * RK;
-  fill(M, y, RIGHT - M, h2, C.hdr2);
-  const tb = (col, offEmu, rowOffEmu, label, value, maxW) => {
-    const x = colX[col] + (offEmu / EMU_PX) * K + 9.6 * K;
-    const ty = y + (rowOffEmu / EMU_PX) * K + 4.8 * K + F11 * 0.85;
-    font("bold", F11, C.tx2);
+  // ---------------------------------------------------------------- "QUOTATION" bar
+  const hq = 22 * RK;
+  fill(M, y, RIGHT - M, hq, C.navy);
+  font("bold", 14 * RK, C.white);
+  doc.text("QUOTATION", (M + RIGHT) / 2, y + hq / 2 + 14 * RK * 0.33, { align: "center" });
+  box(M, y, RIGHT - M, hq, MEDIUM);
+  y += hq;
+
+  // ---------------------------------------------------------------- customer details, three lines each side
+  // left: Quotation Date / Customer Name / Quotation Type; right: Project / Site Address / Mobile Number / Quotation No.
+  const PITCH = 23 * RK;                  // distance between the lines
+  const tb = (x, ty, label, value, maxW, maxLines = 1) => {
+    font("bold", F11, C.label);
     doc.text(label, x, ty);
     const lw = doc.getTextWidth(label);
-    if (value) {
-      let fs = F11;
-      font("normal", fs, C.ink);
-      // first line continues after the label, following lines use the full box width
-      const wrap = () => {
-        const first = doc.splitTextToSize(String(value), maxW - lw)[0] || "";
-        const rest = String(value).slice(first.length).trim();
-        return [first, ...(rest ? doc.splitTextToSize(rest, maxW) : [])];
-      };
-      let lines = wrap();
-      while (lines.length > 3 && fs > F11 * 0.75) { fs -= 0.5; font("normal", fs, C.ink); lines = wrap(); }
-      if (lines.length > 1 && fs === F11) { fs = F11 * 0.88; font("normal", fs, C.ink); lines = wrap(); }
-      lines.slice(0, 3).forEach((ln, i) => doc.text(ln, i === 0 ? x + lw : x, ty + i * fs * 1.15));
-    }
+    if (!value) return 1;
+    let fs = F11;
+    font("normal", fs, C.ink);
+    // first line continues after the label, following lines use the full width
+    const wrap = () => {
+      const first = doc.splitTextToSize(String(value), maxW - lw)[0] || "";
+      const rest = String(value).slice(first.length).trim();
+      return [first, ...(rest ? doc.splitTextToSize(rest, maxW) : [])];
+    };
+    let lines = wrap();
+    while (lines.length > maxLines && fs > F11 * 0.75) { fs -= 0.25; font("normal", fs, C.ink); lines = wrap(); }
+    lines = lines.slice(0, maxLines);
+    lines.forEach((ln, i) => doc.text(ln, i === 0 ? x + lw : x, ty + i * fs * 1.15));
+    return lines.length;
   };
-  const leftW = colX[5] - M - 12, rightW = RIGHT - colX[5] - 12;
-  tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
-  tb(0, 38100, 317500, "Customer Name: ", q.customer, leftW);
-  tb(0, 25400, 615950, "Quotation Type: ", q.type, leftW);
-  tb(5, 69850, 0, "Project / Site Address: ", q.address, rightW);
-  tb(5, 95250, 584200, "Mobile Number: ", q.mobile, rightW);
+  const xL0 = M + 5, xR0 = colX[5] + 5;
+  const leftW = colX[5] - xL0 - 10, rightW = RIGHT - xR0 - 6;
+  // measure the address first: a long address takes two lines and pushes the right column down
+  font("bold", F11); const addrLabW = doc.getTextWidth("Project / Site Address: ");
+  font("normal", F11);
+  const addrLines = q.address && doc.splitTextToSize(String(q.address), rightW - addrLabW).length > 1 ? 2 : 1;
+  const extraR = (addrLines - 1) * F11 * 1.1;
+  const h2 = 2 * PITCH + extraR + 22 * RK;
+  fill(M, y, RIGHT - M, h2, C.cream);
+  const base = y + 9 * RK + F11 * 0.7;
+  tb(xL0, base, "Quotation Date: ", fmtDate(q.date), leftW);
+  tb(xL0, base + PITCH + extraR, "Customer Name: ", q.customer, leftW);
+  tb(xL0, base + 2 * PITCH + extraR, "Quotation Type: ", q.type, leftW);
+  tb(xR0, base, "Project / Site Address: ", q.address, rightW, 2);
+  tb(xR0, base + PITCH + extraR, "Mobile Number: ", q.mobile, rightW);
+  tb(xR0, base + 2 * PITCH + extraR, "Quotation No.: ", q.number, rightW);
   y += h2;
 
   // ---------------------------------------------------------------- row 3: table header (repeated on each page)
   const h3 = 29 * RK;
-  const heads = ["Sr. No.", "Collection / Series", "Model Code", "Product Name", "Product Image", "MRP", "Qty", "Disc.%", "Rate", "Total"];
+  const heads = ["Sr. No.", "Collection / Series", "Model Code", "Product Name", "Product Image", "MRP", "Qty", "Disc. %", "Rate", "Total"];
   const drawHeader = () => {
     fill(M, y, RIGHT - M, h3, C.navy);
     font("bold", F11, C.white);
     heads.forEach((t, i) => {
-      const lines = doc.splitTextToSize(t, colW(i) - 4);
+      // "Disc. %" stays on one line (smaller), longer headings wrap
+      font("bold", F11, C.white);
+      if (!t.includes("/") && doc.getTextWidth(t) > colW(i) - 4) doc.setFontSize(F11 * (colW(i) - 4) / doc.getTextWidth(t));
+      const lines = t.includes("/") || t.length > 12 ? doc.splitTextToSize(t, colW(i) - 4) : [t];
       const lh = F11 * 1.05;
       const ty0 = y + h3 / 2 - ((lines.length - 1) * lh) / 2 + F11 * 0.32;
       lines.forEach((ln, j) => doc.text(ln, colX[i] + colW(i) / 2, ty0 + j * lh, { align: "center" }));
@@ -145,22 +163,48 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   const BOTTOM = A4.h - M;
 
   // footer sizes (needed up front to decide how tall the product rows can be)
-  const hs = 50 * RK * 0.5;
-  const SUM_ROW_H = 15 * RK * 1.2;                 // each totals line (template row height, a little air)
-  const totH = SUM_ROW_H * 6;                      // 5 totals + amount in words
-  // T&C block (same row heights as the Excel): title, one row per line, gap, two "made by" rows, banner
-  const TITLE_H = 26 * RK, TERM_H = 18 * RK, GAP_H = 8 * RK, DET_H = 32 * RK;
-  const terms = settings.terms || [];
+  const SUM_ROW_H = 15 * RK * 1.2;                 // each totals line
+  const NET_H = SUM_ROW_H * 1.25, WORDS_H = SUM_ROW_H * 1.35;
+  const totH = SUM_ROW_H * 4 + NET_H + WORDS_H;   // 4 totals + Net Amount bar + amount in words
+  // T&C block: navy title bar, one wrapped paragraph per point, two "made by" rows, banner
+  const TITLE_H = 24 * RK, GAP_H = 6 * RK, DET_H = 30 * RK;
+  const FTerm = 12 * RK, TERM_LH = FTerm * 1.22, TERM_GAP = 5 * RK;
+  const terms = (settings.terms || []).map((s) => s.trim()).filter(Boolean);
+  // "**bold**" markup -> words with their weight, wrapped to the width
+  const richWrap = (text, size, maxW) => {
+    const words = [];
+    for (const s of String(text).split(/(\*\*[^*]+\*\*)/).filter((x) => x !== "")) {
+      const b = /^\*\*[^*]+\*\*$/.test(s);
+      for (const w of (b ? s.slice(2, -2) : s).split(/(\s+)/)) if (w) words.push([w, b]);
+    }
+    const lines = [[]];
+    let cur = 0;
+    for (const [w, b] of words) {
+      font(b ? "bold" : "normal", size);
+      const ww = doc.getTextWidth(w);
+      if (/^\s+$/.test(w)) { if (cur) { lines[lines.length - 1].push([" ", b]); cur += doc.getTextWidth(" "); } continue; }
+      if (cur + ww > maxW && cur > 0) {
+        const last = lines[lines.length - 1];
+        while (last.length && last[last.length - 1][0] === " ") last.pop();
+        lines.push([]); cur = 0;
+      }
+      lines[lines.length - 1].push([w, b]); cur += ww;
+    }
+    return lines;
+  };
+  const termW = RIGHT - M - 10;
+  const termLines = terms.map((t) => richWrap(t, FTerm, termW));
+  const termsH = termLines.reduce((a, ls) => a + ls.length * TERM_LH + TERM_GAP, 0);
   const closing = (settings.closing || "").trim();
   const closingH = closing ? 30 : 0;     // navy banner at the bottom
-  const tcH = TITLE_H + terms.length * TERM_H + GAP_H + 2 * DET_H + closingH;
+  const tcH = TITLE_H + GAP_H + termsH + 2 * DET_H + closingH;
 
   // ---------------------------------------------------------------- product rows
   // Few products: rows grow (up to 100 pt) to use the page, so the photos are bigger.
   // Many products: template row height, flowing over several pages.
   const minH = 50 * RK;
   const pad = 3;
-  const space = BOTTOM - y - hs - totH - tcH - 6;
+  const space = BOTTOM - y - totH - tcH - 6;
   const nItems = q.items.length;
   const rowH = nItems && nItems * minH <= space ? Math.min(100, Math.max(minH, space / nItems)) : minH;
   for (let i = 0; i < q.items.length; i++) {
@@ -175,8 +219,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     const h = Math.max(rowH, need);
     if (y + h > BOTTOM) newPage(true);
 
-    const bg = i % 2 === 0 ? C.even : C.odd;
-    fill(M, y, RIGHT - M, h, bg);
+    fill(M, y, RIGHT - M, h, C.cream);
     font("bold", F9);
     const mid = y + h / 2;
     const vText = (lines, ci, align = "center") => {
@@ -212,78 +255,67 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     y += h;
   }
 
-  // white spacer row (template row 28)
-  if (y + hs > BOTTOM) newPage();
-  fill(M, y, RIGHT - M, hs, C.white);
-  for (let c = 0; c < 10; c++) { line(colX[c + 1], y, colX[c + 1], y + hs, THIN); }
-  y += hs;
-
   // ---------------------------------------------------------------- totals
-  // Totals one below another, like the template: label right-aligned, amount in the last column,
-  // then the amount in words on the last line.
+  // label right-aligned across the table, amount in the Total column; Net Amount on a navy bar;
+  // then the amount in words
   const tot = calcQuote(q, settings.gst);
   const rows = [
     ["Total Quantity", String(tot.qty)],
     ["Total MRP", "₹" + inr(tot.mrpTotal)],
-    ["Total Taxable Amt", "₹" + inr(tot.sub)],
-    [`Total TAX (GST ${settings.gst}%)`, "₹" + inr(tot.gst)],
-    ["Net Amt", "₹" + inr(tot.net, 0)],
+    ["Total Taxable Amount", "₹" + inr(tot.sub)],
+    ["Total Tax / GST", "₹" + inr(tot.gst)],
   ];
   if (y + totH > BOTTOM) newPage();
   const sumTop = y;
-  const h = SUM_ROW_H;
-  for (const [label, val] of rows) {
-    fill(M, y, RIGHT - M, h, C.totals);
-    font("bold", F11, C.ink);
-    doc.text(label, colX[8] - 4, y + h / 2 + F11 * 0.33, { align: "right" });
-    const avail = RIGHT - colX[8] - 6, w = doc.getTextWidth(val);
-    if (w > avail) doc.setFontSize(F11 * avail / w);
-    doc.text(val, RIGHT - 4, y + h / 2 + F11 * 0.33, { align: "right" });
-    line(colX[8], y, colX[8], y + h, THIN);
+  const valCol = 9;
+  const sumRow = (label, val, h, fs, bg, color) => {
+    fill(M, y, RIGHT - M, h, bg);
+    font("bold", fs, color);
+    doc.text(label, colX[valCol] - 4, y + h / 2 + fs * 0.33, { align: "right" });
+    const avail = RIGHT - colX[valCol] - 5, w = doc.getTextWidth(val);
+    if (w > avail) doc.setFontSize(fs * avail / w);
+    doc.text(val, RIGHT - 3, y + h / 2 + fs * 0.33, { align: "right" });
+    line(colX[valCol], y, colX[valCol], y + h, THIN);
     line(M, y + h, RIGHT, y + h, THIN);
     y += h;
-  }
+  };
+  for (const [label, val] of rows) sumRow(label, val, SUM_ROW_H, F11, C.cream, C.ink);
+  sumRow("Net Amount", "₹" + inr(tot.net, 0), NET_H, 14 * RK, C.navy, C.white);
   // amount in words
-  fill(M, y, RIGHT - M, h, C.totals);
+  fill(M, y, RIGHT - M, WORDS_H, C.cream);
   font("bold", F11, C.ink);
-  const lab = "Amount (In Words): ";
-  doc.text(lab, M + 4, y + h / 2 + F11 * 0.33);
+  const lab = "Amount (in words): ";
+  doc.text(lab, M + 5, y + WORDS_H / 2 + F11 * 0.33);
   const lw = doc.getTextWidth(lab);
   font("normal", F11, C.ink);
-  doc.text(amountInWords(tot.net), M + 4 + lw, y + h / 2 + F11 * 0.33);
-  y += h;
+  doc.text(amountInWords(tot.net), M + 5 + lw, y + WORDS_H / 2 + F11 * 0.33);
+  y += WORDS_H;
   line(M, sumTop, RIGHT, sumTop, MEDIUM);
   line(M, y, RIGHT, y, MEDIUM);
 
   // ---------------------------------------------------------------- terms & conditions
   if (y + tcH > BOTTOM) newPage();
   const tcTop = y;
-  fill(M, y, RIGHT - M, tcH - closingH, C.band);
-  // title: centred, bold, underlined
+  fill(M, y, RIGHT - M, tcH - closingH, C.cream);
+  // title: navy bar, white bold underlined text on the left
+  fill(M, y, RIGHT - M, TITLE_H, C.navy);
   const FT = 14 * RK;
-  font("bold", FT, C.tcHead);
-  const tw = doc.getTextWidth(TERMS_TITLE), tx = (M + RIGHT) / 2 - tw / 2, ty = y + TITLE_H / 2 + FT * 0.33;
+  font("bold", FT, C.white);
+  const tw = doc.getTextWidth(TERMS_TITLE), tx = M + 5, ty = y + TITLE_H / 2 + FT * 0.33;
   doc.text(TERMS_TITLE, tx, ty);
-  doc.setDrawColor(...C.tcHead); doc.setLineWidth(0.8); doc.line(tx, ty + 2, tx + tw, ty + 2); doc.setDrawColor(...C.line);
-  y += TITLE_H;
-  // "**bold**" segments; leading spaces indent the line; shrink a line that is too wide
-  const rich = (text, x, baseY, size, maxW, color = C.ink) => {
-    const segs = String(text).split(/(\*\*[^*]+\*\*)/).filter((s) => s !== "")
-      .map((s) => /^\*\*[^*]+\*\*$/.test(s) ? [s.slice(2, -2), true] : [s, false]);
-    let fs = size;
-    const width = () => segs.reduce((a, [t, b]) => { font(b ? "bold" : "normal", fs); return a + doc.getTextWidth(t); }, 0);
-    while (width() > maxW && fs > size * 0.7) fs -= 0.25;
-    for (const [t, b] of segs) { font(b ? "bold" : "normal", fs, color); doc.text(t, x, baseY); x += doc.getTextWidth(t); }
-  };
-  const FTerm = 11.5 * RK;
-  for (const ln of terms) {
-    const lead = ln.match(/^\s*/)[0].length;
-    font("normal", FTerm);
-    const indent = lead ? doc.getTextWidth(" ") * lead * 1.6 : 0;
-    rich(ln.trim(), M + 4 + indent, y + TERM_H / 2 + FTerm * 0.33, FTerm, RIGHT - M - 8 - indent);
-    y += TERM_H;
+  doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.9); doc.line(tx, ty + 2.2, tx + tw + 3, ty + 2.2); doc.setDrawColor(...C.line);
+  line(M, y + TITLE_H, RIGHT, y + TITLE_H, MEDIUM);
+  y += TITLE_H + GAP_H;
+  // one paragraph per point, wrapped, bold words from "**...**"
+  for (const ls of termLines) {
+    for (const segs of ls) {
+      let x = M + 5;
+      const baseY = y + FTerm * 0.95;
+      for (const [t, b] of segs) { font(b ? "bold" : "normal", FTerm, C.ink); doc.text(t, x, baseY); x += doc.getTextWidth(t); }
+      y += TERM_LH;
+    }
+    y += TERM_GAP;
   }
-  y += GAP_H;
   // "made by" details: company = Prepared By / Designation / Contact Number / Email,
   // dealer = Dealer Name / Dealer Address / Contact Person / Contact Number
   line(M, y, RIGHT, y, THIN);
