@@ -384,6 +384,67 @@ def klassic_blocks_page(page, state):
     return items, problems, all_price_tokens
 
 
+SET_LABEL = re.compile(r"\bSet\b|^Basins? with\b", re.I)
+SPEC_ROW = re.compile(r"^(Open\s+)?(P-Trap|S-Trap|Size)\b|^\(", re.I)
+DIMS = re.compile(r"\d+\s*[xX]\s*\d+\s*[xX]\s*\d+\s*mm", re.I)
+PART_CODE = r"[A-Z]{0,6}\d[A-Z0-9\-]*"
+
+
+def part_kind(desc):
+    d = desc.lower()
+    for k in ("seat cover", "half pedestal", "pedestal", "cistern", "fitting"):
+        if k in d:
+            return k
+    return "part"
+
+
+def set_block(it):
+    """A block that prints separate prices for the bowl/basin, its parts (seat cover, pedestal, cistern,
+    fitting) and the complete Set. Returns (main, parts, sets, specs, problems) or None for normal blocks.
+      main  = dict(label, price, code)
+      parts = [dict(code, desc, dims, price)]
+      sets  = [dict(label, price, parts=[part codes], expected)]"""
+    opts = it["opts"]
+    if len(opts) < 2 or not any(SET_LABEL.search(o["label"]) for o in opts):
+        return None
+    specs, problems = [], []
+    main = dict(label=opts[0]["label"], price=opts[0]["price"], code=opts[0]["code"])
+    parts, sets = [], []
+    for o in opts[1:]:
+        before = []
+        for x in o["before"]:
+            if SPEC_ROW.match(x):
+                specs.append(clean(x))
+            elif re.match(r"^Suitable for\b|^KS\d+$", x):
+                continue
+            else:
+                before.append(x)
+        if SET_LABEL.search(o["label"]):
+            sets.append(dict(label=clean(o["label"]), price=o["price"]))
+            continue
+        if main["label"].lower().endswith(" with") and before and not parts:
+            main["label"] = clean(main["label"] + " " + before.pop(0))   # "Wall Hung with" + "In-Built Jet"
+        t = clean(" ".join(before + [o["label"]]))
+        m = re.match(rf"^({PART_CODE})\s*:\s*(.+)$", t)
+        if m:
+            code, desc = m.group(1), m.group(2)
+        else:
+            m = re.match(rf"^(.*?)\s*:?\s*({PART_CODE})$", t)
+            if not m:
+                problems.append(f"{it['head']}: cannot read part '{t}'")
+                continue
+            desc, code = m.group(1), m.group(2)
+        dm = DIMS.search(desc)
+        dims = dm.group(0) if dm else ""
+        desc = clean(DIMS.sub("", desc)).rstrip(" :")
+        parts.append(dict(code=code, desc=desc, dims=dims, price=o["price"]))
+    for s in sets:
+        named = [p["code"] for p in parts if re.search(rf"(?<![A-Z0-9]){re.escape(p['code'])}(?![A-Z0-9])", s["label"])]
+        s["parts"] = named or [p["code"] for p in parts]
+        s["expected"] = main["price"] + sum(p["price"] for p in parts if p["code"] in s["parts"])
+    return main, parts, sets, list(dict.fromkeys(specs)), problems
+
+
 def table_page(page, state):
     """Tables such as SEAT COVERS: CODE | DESCRIPTION | PRICE on one row."""
     L = lines_of(page)
@@ -489,7 +550,36 @@ def main():
             mrp=mrp, unit="Piece", price_list=PRICE_LIST_DATE[coll],
             source=f"{SOURCES[coll]} p.{page_no}", page=page_no,
             image=save_img(page, rect, pid) if rect else "", flag=kw.get("flag", ""),
+            kind=kw.get("kind", ""),
         ))
+
+    part_reg = {}      # (code, price) -> part entry, shared by every block that offers it
+    tally = []
+
+    def emit_set_block(pn, page, it, sb):
+        main, parts, sets, specs, probs = sb
+        for p in probs:
+            report.append(f"KLASSIC p{pn} {p}")
+        nm = f"{it['name']} {it['sub']}".strip()
+        pc = {p["code"]: p for p in parts}
+        alts = [c for c in it["codes"] if c != main["code"]]
+        colour = "White" if "White" in it["head"] or "White" in " ".join(it["rows"]) else ""
+        details = "; ".join(specs)
+        for s in sets:
+            inc = " + ".join(f"{pc[c]['desc']} ({c})" for c in s["parts"])
+            ok = s["price"] == s["expected"]
+            tally.append(f"p{pn} {main['code']:<11} {s['label']:<34} printed {s['price']:>6}  parts sum {s['expected']:>6}  "
+                         + ("OK" if ok else f"DIFF {s['price'] - s['expected']:+d}"))
+            add("KLASSIC", pn, page, "Sanitaryware", it["name"] or it["sub"], it["sub"], main["code"], nm, s["price"],
+                it["_img"], alt_codes=alts, variant=f"Complete Set: {main['label']} + {inc}", details=details,
+                colour=colour, kind="set")
+        kinds = list(dict.fromkeys(part_kind(p["desc"]).replace("half ", "") for p in parts))
+        add("KLASSIC", pn, page, "Sanitaryware", it["name"] or it["sub"], it["sub"], main["code"], nm, main["price"],
+            it["_img"], alt_codes=alts, variant=f"{main['label']} only (without {' / '.join(kinds)})", details=details,
+            colour=colour, kind="single")
+        for p in parts:
+            e = part_reg.setdefault((p["code"], p["price"]), dict(p, fits=[], pn=pn, page=page, img=it["_img"], sub=it["sub"]))
+            e["fits"].append(f"{it['name']} {main['code']}".strip())
 
     # ---- KLASSIC
     d = pymupdf.open(os.path.join(SRC, SOURCES["KLASSIC"]))
@@ -503,6 +593,10 @@ def main():
             st["category"] = "Sanitaryware"
             items, probs, n = klassic_blocks_page(page, st)
             for it in items:
+                sb = set_block(it)
+                if sb:
+                    emit_set_block(pn, page, it, sb)
+                    continue
                 opts = it["opts"]
                 SPEC = re.compile(r"^(Open\s+)?(P-Trap|S-Trap|Size|Cistern\s*:|Twin Flush)", re.I)
                 trap_varies = any("Trap" in " ".join(o["before"]) for o in opts[1:])
@@ -543,6 +637,23 @@ def main():
             add("KLASSIC", pn, page, st["category"], st["series"], st["series"], it["code"], it["name"], it["mrp"],
                 it["_img"], alt_codes=it["alt_codes"], variant=it["variant"], details=it["details"], flag=it["flag"])
         report.append(f"KLASSIC p{pn} [{st['category']}/{st['series']}] items={len(items)} prices={n} " + ("; ".join(probs) if probs else "OK"))
+
+    # parts (seat covers, pedestals, cisterns, fittings) that are sold with a bowl/basin: one entry per code
+    listed = {}
+    for p in products:
+        listed.setdefault(p["code"], set()).add(p["mrp"])
+    for (code, price), e in part_reg.items():
+        if code.startswith("KS") and price in listed.get("KSP" + code[2:], ()):
+            continue      # "Fitting KS906" in the Kimura block is the accessory listed as KSP906
+        if code in listed:
+            if price not in listed[code]:
+                report.append(f"PART {code}: price {price} in set table, but listed separately at {sorted(listed[code])}")
+            continue
+        fits = list(dict.fromkeys(e["fits"]))
+        add("KLASSIC", e["pn"], e["page"], "Sanitaryware", e["sub"], e["sub"], code, e["desc"], price, e["img"],
+            details="; ".join(x for x in [e["dims"], "Fits: " + ", ".join(fits)] if x), kind="part")
+    with open(os.path.join(ROOT, "data", "set_tally.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(tally))
 
     # ---- AURUM
     d = pymupdf.open(os.path.join(SRC, SOURCES["AURUM"]))

@@ -165,7 +165,7 @@ function renderResults() {
       <img loading="lazy" src="${esc(store.imageURLSync(p))}" alt="" onerror="this.style.visibility='hidden'">
       <div>
         <div class="code">${highlight(p.code, val)}${p.alt_codes && p.alt_codes.length ? ` <span class="meta">/ ${esc(p.alt_codes.join(" / "))}</span>` : ""}</div>
-        <div class="name">${highlight(productLabel(p), val)}</div>
+        <div class="name">${p.kind === "set" ? `<span class="set-tag">SET</span>` : ""}${highlight(productLabel(p), val)}</div>
         <div class="meta">${esc(seriesLabel(p))}${p.flag ? ` · <span class="flag">⚠ ${esc(p.flag)}</span>` : ""}</div>
       </div>
       <div class="price">${rupee(p.mrp, 0)}</div>
@@ -552,6 +552,7 @@ async function loadData() {
   await store.warmImageCache(list);
   buildIndex(list);
   renderPLSummary();
+  if (store.dbUpgraded) toast("Price list updated: WC / basin sets now show the full set price first.");
 }
 
 /** show the password screen until the price list can be decrypted */

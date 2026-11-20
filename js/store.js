@@ -111,9 +111,19 @@ async function loadBuiltIn() {
   return r.json();
 }
 
+// Raise when the built-in database is restructured: older copies saved in a browser are then replaced.
+// rev 2: WC / basin "Set" tables split into Complete Set + bowl/basin only + parts with their own codes.
+export const DB_REV = 2;
+export let dbUpgraded = false;
+
 export async function loadProducts() {
   let local = null;
   try { local = await kvGet("products"); } catch (e) { console.warn("IndexedDB unavailable", e); }
+  if (local && (local.meta?.rev || 1) < DB_REV) {
+    try { await kvDel("products"); } catch {}
+    local = null;
+    dbUpgraded = true;
+  }
   if (local && Array.isArray(local.products) && local.products.length) {
     products = local.products;
     meta = local.meta || defaultMeta(products);
@@ -132,6 +142,7 @@ export async function saveProducts(list, newMeta) {
     if (meta.lists[c]) meta.lists[c].count = list.filter((x) => x.collection === c).length;
   }
   meta.source = "local";
+  meta.rev = DB_REV;
   await kvSet("products", { products: list, meta });
 }
 

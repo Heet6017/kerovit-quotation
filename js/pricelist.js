@@ -424,6 +424,48 @@ export async function debugPage(url, pn) {
   return readPage(await doc.getPage(pn));
 }
 
+// ---------------------------------------------------------------- blocks with a "Set" price
+// (same rules as set_block() in tools/extract.py)
+const SET_LABEL = /\bSet\b|^Basins? with\b/i;
+const SPEC_ROW = /^(Open\s+)?(P-Trap|S-Trap|Size)\b|^\(/i;
+const DIMS = /\d+\s*[xX]\s*\d+\s*[xX]\s*\d+\s*mm/i;
+const PART_CODE = String.raw`[A-Z]{0,6}\d[A-Z0-9\-]*`;
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function partKind(desc) {
+  const d = desc.toLowerCase();
+  return ["seat cover", "half pedestal", "pedestal", "cistern", "fitting"].find((k) => d.includes(k)) || "part";
+}
+
+function setBlock(it) {
+  const opts = it.opts;
+  if (opts.length < 2 || !opts.some((o) => SET_LABEL.test(o.label))) return null;
+  const specs = [], problems = [], parts = [], sets = [];
+  const main = { label: opts[0].label, price: opts[0].price, code: opts[0].code };
+  for (const o of opts.slice(1)) {
+    const before = [];
+    for (const x of o.before) {
+      if (SPEC_ROW.test(x)) specs.push(clean(x));
+      else if (!/^Suitable for\b|^KS\d+$/.test(x)) before.push(x);
+    }
+    if (SET_LABEL.test(o.label)) { sets.push({ label: clean(o.label), price: o.price }); continue; }
+    if (/ with$/i.test(main.label) && before.length && !parts.length) main.label = clean(main.label + " " + before.shift());
+    const t = clean([...before, o.label].join(" "));
+    let code, desc, m = t.match(new RegExp(`^(${PART_CODE})\\s*:\\s*(.+)$`));
+    if (m) [code, desc] = [m[1], m[2]];
+    else if ((m = t.match(new RegExp(`^(.*?)\\s*:?\\s*(${PART_CODE})$`)))) [desc, code] = [m[1], m[2]];
+    else { problems.push(`${it.head}: cannot read part '${t}'`); continue; }
+    const dm = desc.match(DIMS);
+    parts.push({ code, desc: clean(desc.replace(DIMS, "")).replace(/[ :]+$/, ""), dims: dm ? dm[0] : "", price: o.price });
+  }
+  for (const s of sets) {
+    const named = parts.filter((p) => new RegExp(`(?<![A-Z0-9])${reEsc(p.code)}(?![A-Z0-9])`).test(s.label)).map((p) => p.code);
+    s.parts = named.length ? named : parts.map((p) => p.code);
+    s.expected = main.price + parts.filter((p) => s.parts.includes(p.code)).reduce((a, p) => a + p.price, 0);
+  }
+  return { main, parts, sets, specs: [...new Set(specs)], problems };
+}
+
 // ---------------------------------------------------------------- whole document
 
 export async function parsePriceList(file, coll, onProgress = () => {}) {
@@ -435,8 +477,31 @@ export async function parsePriceList(file, coll, onProgress = () => {}) {
     collection: coll, category: o.category, sub_category: o.sub, series: o.series, code: o.code,
     alt_codes: o.alt_codes || [], name: o.name, variant: o.variant || "", details: o.details || "",
     finish: o.finish || "", colour: o.colour || "", mrp: o.mrp, unit: "Piece", page: pn,
-    flag: o.flag || "", _crop: o.img ? { page: pn, rect: o.img } : null,
+    flag: o.flag || "", kind: o.kind || "", _crop: o.img ? { page: pn, rect: o.img } : null,
   });
+  const partReg = new Map();   // "code|price" -> part sold with a bowl/basin
+  const emitSetBlock = (pn, it, sb) => {
+    const { main, parts, sets, specs } = sb;
+    sb.problems.forEach((x) => problems.push(`Page ${pn}: ${x}`));
+    const nm = `${it.name} ${it.sub}`.trim();
+    const pc = Object.fromEntries(parts.map((p) => [p.code, p]));
+    const alts = it.codes.filter((c) => c !== main.code);
+    const colour = it.head.includes("White") || it.rows.join(" ").includes("White") ? "White" : "";
+    const base = { category: "Sanitaryware", series: it.name || it.sub, sub: it.sub, code: main.code, name: nm,
+      img: it.img, alt_codes: alts, details: specs.join("; "), colour };
+    for (const s of sets) {
+      const inc = s.parts.map((c) => `${pc[c].desc} (${c})`).join(" + ");
+      if (s.price !== s.expected) problems.push(`Page ${pn}: ${main.code} "${s.label}" printed ₹${s.price}, parts add up to ₹${s.expected} (printed price used)`);
+      add(pn, { ...base, mrp: s.price, variant: `Complete Set: ${main.label} + ${inc}`, kind: "set" });
+    }
+    const kinds = [...new Set(parts.map((p) => partKind(p.desc).replace("half ", "")))];
+    add(pn, { ...base, mrp: main.price, variant: `${main.label} only (without ${kinds.join(" / ")})`, kind: "single" });
+    for (const p of parts) {
+      const k = `${p.code}|${p.price}`;
+      if (!partReg.has(k)) partReg.set(k, { ...p, fits: [], pn, img: it.img, sub: it.sub });
+      partReg.get(k).fits.push(`${it.name} ${main.code}`.trim());
+    }
+  };
   for (let pn = 1; pn <= doc.numPages; pn++) {
     onProgress(pn, doc.numPages);
     const page = await doc.getPage(pn);
@@ -455,6 +520,8 @@ export async function parsePriceList(file, coll, onProgress = () => {}) {
       st.category = "Sanitaryware";
       const { items, problems: pr } = klassicBlocksPage(pg, st);
       for (const it of items) {
+        const sb = setBlock(it);
+        if (sb) { emitSetBlock(pn, it, sb); continue; }
         const opts = it.opts;
         const trapVaries = opts.slice(1).some((o) => o.before.join(" ").includes("Trap"));
         let desc = [];
@@ -496,6 +563,18 @@ export async function parsePriceList(file, coll, onProgress = () => {}) {
       });
     }
     pr.forEach((x) => problems.push(`Page ${pn}: ${x}`));
+  }
+  // seat covers / pedestals / cisterns / fittings sold with a bowl or basin: one entry per code
+  const listed = new Map();
+  for (const p of products) { if (!listed.has(p.code)) listed.set(p.code, new Set()); listed.get(p.code).add(p.mrp); }
+  for (const e of partReg.values()) {
+    if (e.code.startsWith("KS") && listed.get("KSP" + e.code.slice(2))?.has(e.price)) continue;
+    if (listed.has(e.code)) {
+      if (!listed.get(e.code).has(e.price)) problems.push(`Part ${e.code}: ₹${e.price} in a set table, but listed separately at ₹${[...listed.get(e.code)].join(" / ")}`);
+      continue;
+    }
+    const details = [e.dims, "Fits: " + [...new Set(e.fits)].join(", ")].filter(Boolean).join("; ");
+    add(e.pn, { category: "Sanitaryware", series: e.sub, sub: e.sub, code: e.code, name: e.desc, mrp: e.price, img: e.img, details, kind: "part" });
   }
   const guess = file.name.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}/i);
   return { products, problems, pages: doc.numPages, doc, guessName: guess ? guess[0] : "" };

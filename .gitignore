@@ -9,3 +9,4 @@ testdata/
 .claude/
 __pycache__/
 *.pyc
+data/set_tally.txt
