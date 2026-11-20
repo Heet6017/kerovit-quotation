@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kerovit Quotation Maker</title>
 <link rel="icon" href="assets/logo-kerovit.png">
-<link rel="stylesheet" href="css/app.css?v=202611190922">
+<link rel="stylesheet" href="css/app.css?v=202611192008">
 </head>
 <body>
 <header class="topbar">
@@ -30,23 +30,26 @@
     <div class="steps">
       <!-- Step 1: customer -->
       <div class="card">
-        <div class="card-head"><span class="num">1</span><h2 id="partyTitle">Customer details</h2>
+        <div class="card-head"><span class="num">1</span><h2>Quotation made by</h2>
           <div class="spacer"></div>
           <button class="btn ghost" id="btnNew" title="Start a fresh quotation">+ New quotation</button>
         </div>
-        <div class="party-row">
-          <span class="muted">Quotation for</span>
-          <div class="types party" id="partyChoices">
-            <button data-party="customer" class="type">CUSTOMER / CLIENT</button>
-            <button data-party="dealer" class="type">DEALER / CHANNEL PARTNER</button>
-          </div>
+        <div class="types party" id="makerChoices">
+          <button data-maker="company" class="type">KEROVIT (COMPANY)</button>
+          <button data-maker="dealer" class="type">DEALER / CHANNEL PARTNER</button>
         </div>
+        <p class="hint">These details are printed at the bottom of the quotation and remembered for next time.</p>
+        <div class="grid2 maker-grid">
+          <label><span id="lblBy1">Prepared By</span><input id="fBy1" autocomplete="off"></label>
+          <label><span id="lblBy2">Designation</span><input id="fBy2" autocomplete="off"></label>
+          <label><span id="lblBy3">Contact Number</span><input id="fBy3" autocomplete="off"></label>
+          <label><span id="lblBy4">Email</span><input id="fBy4" autocomplete="off"></label>
+        </div>
+        <h3 class="sub-head">Customer details</h3>
         <div class="grid2">
-          <label><span id="lblName">Customer Name</span><input id="fCustomer" autocomplete="off" placeholder="e.g. Mr. Rajesh Patel"></label>
-          <label class="dealer-only">Contact Person<input id="fContact" autocomplete="off" placeholder="e.g. Mr. Amit Shah"></label>
+          <label>Customer Name<input id="fCustomer" autocomplete="off" placeholder="e.g. Mr. Rajesh Patel"></label>
           <label>Mobile Number<input id="fMobile" inputmode="tel" autocomplete="off" placeholder="e.g. 98250 12345"></label>
-          <label class="dealer-only">GSTIN<input id="fGstin" autocomplete="off" maxlength="15" style="text-transform:uppercase" placeholder="e.g. 24ABCDE1234F1Z5"></label>
-          <label class="span2"><span id="lblAddress">Project / Site Address</span><textarea id="fAddress" rows="2" placeholder="Site / project address"></textarea></label>
+          <label class="span2">Project / Site Address<textarea id="fAddress" rows="2" placeholder="Site / project address"></textarea></label>
           <label>Quotation Date<input id="fDate" type="date"></label>
           <label>Quotation No.<input id="fNumber" autocomplete="off"></label>
         </div>
@@ -183,8 +186,8 @@
     </div>
     <div class="card">
       <div class="card-head"><h2>Terms &amp; Conditions</h2><div class="spacer"></div>
-        <button class="btn ghost" id="btnResetTerms">Restore template text</button></div>
-      <p class="hint">One condition per line (11 lines, as in the template).</p>
+        <button class="btn ghost" id="btnResetTerms">Restore default text</button></div>
+      <p class="hint">One line per row. Put <code>**text**</code> around words to make them bold; start a line with spaces to indent it.</p>
       <textarea id="sTerms" rows="12" class="mono"></textarea>
     </div>
     <div class="card">
@@ -217,13 +220,13 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/app.js": "./js/app.js?v=202611190922",
-    "./js/store.js": "./js/store.js?v=202611190922",
-    "./js/common.js": "./js/common.js?v=202611190922",
-    "./js/search.js": "./js/search.js?v=202611190922",
-    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611190922",
-    "./js/pdf-export.js": "./js/pdf-export.js?v=202611190922",
-    "./js/pricelist.js": "./js/pricelist.js?v=202611190922"
+    "./js/app.js": "./js/app.js?v=202611192008",
+    "./js/store.js": "./js/store.js?v=202611192008",
+    "./js/common.js": "./js/common.js?v=202611192008",
+    "./js/search.js": "./js/search.js?v=202611192008",
+    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611192008",
+    "./js/pdf-export.js": "./js/pdf-export.js?v=202611192008",
+    "./js/pricelist.js": "./js/pricelist.js?v=202611192008"
   }
 }
 </script>

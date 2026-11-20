@@ -1,7 +1,7 @@
 // PDF export: draws the quotation with the same geometry, colours and fonts as the Excel
 // template printed on A4 (Carlito = metric-compatible Calibri, includes the ₹ sign).
 import { calcLine, calcQuote, fmtDate, inr, loadImageScaled, amountInWords } from "./common.js";
-import { imageURL } from "./store.js";
+import { imageURL, TERMS_TITLE, MAKER_FIELDS } from "./store.js";
 
 const A4 = { w: 595.28, h: 841.89 };
 const M = 28;                                   // page margin (pt)
@@ -83,8 +83,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   y += h1;
 
   // ---------------------------------------------------------------- row 2: customer text boxes
-  const dealer = q.party === "dealer";
-  const h2 = (dealer ? 96 : 72) * RK;
+  const h2 = 72 * RK;
   fill(M, y, RIGHT - M, h2, C.hdr2);
   const tb = (col, offEmu, rowOffEmu, label, value, maxW) => {
     const x = colX[col] + (offEmu / EMU_PX) * K + 9.6 * K;
@@ -108,21 +107,11 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     }
   };
   const leftW = colX[5] - M - 12, rightW = RIGHT - colX[5] - 12;
-  if (dealer) {
-    tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
-    tb(0, 38100, 292100, "Dealer Name: ", q.customer, leftW);
-    tb(0, 38100, 596900, "Contact Person: ", q.contact, leftW);
-    tb(0, 25400, 901700, "Quotation Type: ", q.type, leftW);
-    tb(5, 69850, 0, "Address: ", q.address, rightW);
-    tb(5, 95250, 596900, "Mobile Number: ", q.mobile, rightW);
-    tb(5, 95250, 901700, "GSTIN: ", (q.gstin || "").toUpperCase(), rightW);
-  } else {
-    tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
-    tb(0, 38100, 317500, "Customer Name: ", q.customer, leftW);
-    tb(0, 25400, 615950, "Quotation Type: ", q.type, leftW);
-    tb(5, 69850, 0, "Project / Site Address: ", q.address, rightW);
-    tb(5, 95250, 584200, "Mobile Number: ", q.mobile, rightW);
-  }
+  tb(0, 31750, 6350, "Quotation Date: ", fmtDate(q.date), leftW);
+  tb(0, 38100, 317500, "Customer Name: ", q.customer, leftW);
+  tb(0, 25400, 615950, "Quotation Type: ", q.type, leftW);
+  tb(5, 69850, 0, "Project / Site Address: ", q.address, rightW);
+  tb(5, 95250, 584200, "Mobile Number: ", q.mobile, rightW);
   y += h2;
 
   // ---------------------------------------------------------------- row 3: table header (repeated on each page)
@@ -159,13 +148,12 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   const hs = 50 * RK * 0.5;
   const SUM_ROW_H = 15 * RK * 1.2;                 // each totals line (template row height, a little air)
   const totH = SUM_ROW_H * 6;                      // 5 totals + amount in words
-  font("normal", F11);
-  const termLines = settings.terms.map((t) => doc.splitTextToSize(t, RIGHT - M - 8));
-  const tlh = 14.5 * RK;
-  font("bold", F11);
+  // T&C block (same row heights as the Excel): title, one row per line, gap, two "made by" rows, banner
+  const TITLE_H = 26 * RK, TERM_H = 18 * RK, GAP_H = 8 * RK, DET_H = 32 * RK;
+  const terms = settings.terms || [];
   const closing = (settings.closing || "").trim();
   const closingH = closing ? 30 : 0;     // navy banner at the bottom
-  const tcH = 15.5 * RK + termLines.reduce((a, l) => a + l.length * tlh, 0) + 15 * RK + closingH;
+  const tcH = TITLE_H + terms.length * TERM_H + GAP_H + 2 * DET_H + closingH;
 
   // ---------------------------------------------------------------- product rows
   // Few products: rows grow (up to 100 pt) to use the page, so the photos are bigger.
@@ -270,22 +258,69 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   // ---------------------------------------------------------------- terms & conditions
   if (y + tcH > BOTTOM) newPage();
   const tcTop = y;
-  fill(M, y, RIGHT - M, tcH, C.band);
-  font("bold", F12, C.tcHead);
-  doc.text("TERMS & CONDITIONS", M + 3, y + 15.5 * RK * 0.78);
-  y += 15.5 * RK;
-  font("normal", F11, C.ink);
-  const termTops = [];
-  for (const lines of termLines) {
-    termTops.push(y);
-    for (const ln of lines) { doc.text(ln, M + 3, y + tlh * 0.78); y += tlh; }
+  fill(M, y, RIGHT - M, tcH - closingH, C.band);
+  // title: centred, bold, underlined
+  const FT = 14 * RK;
+  font("bold", FT, C.tcHead);
+  const tw = doc.getTextWidth(TERMS_TITLE), tx = (M + RIGHT) / 2 - tw / 2, ty = y + TITLE_H / 2 + FT * 0.33;
+  doc.text(TERMS_TITLE, tx, ty);
+  doc.setDrawColor(...C.tcHead); doc.setLineWidth(0.8); doc.line(tx, ty + 2, tx + tw, ty + 2); doc.setDrawColor(...C.line);
+  y += TITLE_H;
+  // "**bold**" segments; leading spaces indent the line; shrink a line that is too wide
+  const rich = (text, x, baseY, size, maxW, color = C.ink) => {
+    const segs = String(text).split(/(\*\*[^*]+\*\*)/).filter((s) => s !== "")
+      .map((s) => /^\*\*[^*]+\*\*$/.test(s) ? [s.slice(2, -2), true] : [s, false]);
+    let fs = size;
+    const width = () => segs.reduce((a, [t, b]) => { font(b ? "bold" : "normal", fs); return a + doc.getTextWidth(t); }, 0);
+    while (width() > maxW && fs > size * 0.7) fs -= 0.25;
+    for (const [t, b] of segs) { font(b ? "bold" : "normal", fs, color); doc.text(t, x, baseY); x += doc.getTextWidth(t); }
+  };
+  const FTerm = 11.5 * RK;
+  for (const ln of terms) {
+    const lead = ln.match(/^\s*/)[0].length;
+    font("normal", FTerm);
+    const indent = lead ? doc.getTextWidth(" ") * lead * 1.6 : 0;
+    rich(ln.trim(), M + 4 + indent, y + TERM_H / 2 + FTerm * 0.33, FTerm, RIGHT - M - 8 - indent);
+    y += TERM_H;
   }
-  if (termTops.length >= 10) {
-    // template anchor: term 8 to term 10, right edge in column J; same crop as the template
-    const ay = anchorY(termTops[7], 69851), by = anchorY(termTops[9], 156253);
-    logoRight(kerovit, "ker", anchorX(9, 527050), ay, by - ay);
-  }
-  y += 15 * RK;
+  y += GAP_H;
+  // "made by" details: company = Prepared By / Designation / Contact Number / Email,
+  // dealer = Dealer Name / Dealer Address / Contact Person / Contact Number
+  line(M, y, RIGHT, y, THIN);
+  const maker = q.maker === "dealer" ? "dealer" : "company";
+  const labels = MAKER_FIELDS[maker], info = Array.isArray(q.makerInfo) ? q.makerInfo : [];
+  const FD = 11.5 * RK;
+  const pairAt = (i, x, top, maxW) => {
+    font("bold", FD);
+    const lab = labels[i] + " : ";
+    const lw = doc.getTextWidth(lab);
+    const val = String(info[i] || "").trim();
+    let fs = FD * 0.96;
+    // first line continues after the label, the next line starts under the label (like the Excel cell)
+    const wrap = () => {
+      if (!val) return [];
+      font("normal", fs);
+      const first = doc.splitTextToSize(val, maxW - lw)[0] || "";
+      const rest = val.slice(first.length).trim();
+      return [first, ...(rest ? doc.splitTextToSize(rest, maxW) : [])];
+    };
+    let ls = wrap();
+    // phone numbers / emails: never split, shrink a little instead
+    const oneLine = !/\s/.test(val) || !/[a-z]/i.test(val);
+    while ((ls.length > (oneLine ? 1 : 2)) && fs > FD * 0.7) { fs -= 0.25; ls = wrap(); }
+    const nl = Math.max(1, Math.min(2, ls.length)), lh = FD * 1.15;
+    const base = top + DET_H / 2 - ((nl - 1) * lh) / 2 + FD * 0.33;
+    font("bold", FD, C.ink); doc.text(lab, x, base);
+    font("normal", fs, C.ink);
+    ls.slice(0, 2).forEach((t, j) => doc.text(t, j === 0 ? x + lw : x, base + j * lh));
+  };
+  const logoH = 38 * RK, logoW = kerovit ? logoH * kerovit.w / kerovit.h : 0;
+  const xL = M + 8, xR = colX[4] + 4, wL = colX[4] - xL - 6, wR = RIGHT - 6 - logoW - 10 - xR;
+  pairAt(0, xL, y, wL); pairAt(1, xR, y, wR);
+  pairAt(2, xL, y + DET_H, wL); pairAt(3, xR, y + DET_H, wR);
+  // Kerovit logo on the right of the two detail rows (same crop as the template)
+  logoRight(kerovit, "ker", RIGHT - 6, y + DET_H - logoH / 2, logoH);
+  y += 2 * DET_H;
   if (closing) {
     // closing banner: white bold text on navy, the tagline "Bathrooms You Desire" heavier
     fill(M, y, RIGHT - M, closingH, C.navy);

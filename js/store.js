@@ -180,7 +180,18 @@ export async function warmImageCache(list) {
 
 // ---------------------------------------------------------------- settings
 
+// "**...**" = bold, leading spaces = indented continuation line
+export const TERMS_TITLE = "Mandatory Terms & Conditions for Quotation";
 export const DEFAULT_TERMS = [
+  "**Validity :**  The Rates will be valid till 30 Days From the Date of Quotation",
+  "**Delivery:**  is subject to product availability and confirmed order/payment terms.",
+  "**Warranty :** We provide 10 years of after-sales service unmatched in the industry,",
+  "        with servicing carried out by our own trained **Kerovit technicians**",
+  "**Queries:**  for any queries about this quotation or to request changes , please feel free to contact",
+  "        your Kerovit representative using the details below",
+];
+const OLD_TERMS_START = "1. Prices are based on the prevailing";
+export const OLD_DEFAULT_TERMS = [
   "1. Prices are based on the prevailing October 2026 price list and are subject to change as applicable.",
   "2. GST will be charged extra as applicable.",
   "3. Quotation validity is subject to the date and terms mentioned above.",
@@ -197,12 +208,21 @@ export const DEFAULT_TERMS = [
 const SETTINGS_KEY = "kq.settings";
 export const DEFAULT_CLOSING = "Thank you for considering Kerovit. We look forward to helping you create Bathrooms You Desire.";
 const OLD_CLOSINGS = ["Thank you for choosing Kerovit. We truly appreciate your trust in us and look forward to serving you."];
-const DEFAULT_SETTINGS = { gst: 18, nextNo: 1, prefix: "KQ/", keepRows: false, terms: DEFAULT_TERMS, closing: DEFAULT_CLOSING };
+// who makes the quotation -> the four details printed above the closing banner
+export const MAKER_FIELDS = {
+  company: ["Prepared By", "Designation", "Contact Number", "Email"],
+  dealer: ["Dealer Name", "Dealer Address", "Contact Person", "Contact Number"],
+};
+const DEFAULT_SETTINGS = { gst: 18, nextNo: 1, prefix: "KQ/", keepRows: false, terms: DEFAULT_TERMS, closing: DEFAULT_CLOSING,
+  maker: "company", makerInfo: { company: ["", "", "", ""], dealer: ["", "", "", ""] } };
 
 export function getSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
     if (!s.closing || OLD_CLOSINGS.includes(s.closing)) delete s.closing;   // old default -> new default
+    // the first generic 11-line terms -> the new terms (unless they were edited)
+    if (Array.isArray(s.terms) && s.terms.join("\n") === OLD_DEFAULT_TERMS.join("\n")) delete s.terms;
+    if (Array.isArray(s.terms) && s.terms[0] && s.terms[0].startsWith(OLD_TERMS_START) && s.terms.length === 11) delete s.terms;
     return { ...DEFAULT_SETTINGS, ...s, terms: Array.isArray(s.terms) && s.terms.length ? s.terms : DEFAULT_TERMS };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }

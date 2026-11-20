@@ -2,7 +2,7 @@
 // so the logos, header text boxes, colours, borders and T&C stay exactly as designed.
 // (Excel libraries such as ExcelJS drop the template's text boxes, so they can't be used.)
 import { calcLine, calcQuote, fmtDate, productLabel, seriesLabel, loadImageScaled, round2, amountInWords } from "./common.js";
-import { imageURL } from "./store.js";
+import { imageURL, TERMS_TITLE, MAKER_FIELDS } from "./store.js";
 
 const TEMPLATE_URL = "assets/template.xlsx";
 const FIRST_DATA_ROW = 4;      // template product rows are 4..27, row 28 is the white spacer row
@@ -46,7 +46,7 @@ class Styles {
   border(l, r, t, b) {
     const key = [l, r, t, b].join("|");
     if (this.borderCache.has(key)) return this.borderCache.get(key);
-    const side = (n, s) => `<${n} style="${s}"><color indexed="64"/></${n}>`;
+    const side = (n, s) => s === "none" ? `<${n}/>` : `<${n} style="${s}"><color indexed="64"/></${n}>`;
     const x = `<border>${side("left", l)}${side("right", r)}${side("top", t)}${side("bottom", b)}<diagonal/></border>`;
     this.xml = this.xml.replace(/<borders count="\d+"/, `<borders count="${this.borderCount + 1}"`).replace("</borders>", x + "</borders>");
     this.borderCache.set(key, this.borderCount);
@@ -143,21 +143,13 @@ function setTextbox(drawing, name, label, value, { cx, cy, small } = {}) {
   });
 }
 
-function anchorRe(name) {
-  return new RegExp(`<xdr:oneCellAnchor>(?:(?!</xdr:oneCellAnchor>)[\\s\\S])*?name="${name}"[\\s\\S]*?</xdr:oneCellAnchor>`);
-}
-
-// copy a template text box under a new name (same look), placed at the given cell offset
-function addTextbox(drawing, src, name, id, col, colOff, rowOff) {
-  const m = drawing.match(anchorRe(src));
-  if (!m) return drawing;
-  const copy = m[0].replace(/<xdr:cNvPr id="\d+" name="[^"]*">[\s\S]*?<\/xdr:cNvPr>/, `<xdr:cNvPr id="${id}" name="${name}"/>`);
-  return drawing.replace("</xdr:wsDr>", moveTextbox(copy, name, col, colOff, rowOff) + "</xdr:wsDr>");
-}
-
-function moveTextbox(drawing, name, col, colOff, rowOff) {
-  return drawing.replace(anchorRe(name), (a) => a.replace(/<xdr:from>[\s\S]*?<\/xdr:from>/,
-    `<xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${colOff}</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>${rowOff}</xdr:rowOff></xdr:from>`));
+/** rich-text runs from "**bold**" markup */
+function richRuns(text, { sz = 11, color = "FF000000", bold = false } = {}) {
+  return String(text).split(/(\*\*[^*]+\*\*)/).filter((s) => s !== "").map((seg) => {
+    const b = bold || /^\*\*[^*]+\*\*$/.test(seg);
+    const t = seg.replace(/^\*\*|\*\*$/g, "");
+    return `<r><rPr>${b ? "<b/>" : ""}<sz val="${sz}"/><color rgb="${color}"/><rFont val="Calibri"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(t)}</t></r>`;
+  }).join("");
 }
 
 function picAnchor(i, col, row, offX, offY, cx, cy, rid) {
@@ -190,9 +182,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
 
   const S = [rowStyles(styles, true), rowStyles(styles, false)];
   // few products -> taller rows (bigger photos); many products -> template height of 50
-  const dealer = q.party === "dealer";
-  const ROW2_EXTRA = dealer ? 24 : 0;     // dealer details need a taller row 2 (4 lines)
-  const baseH = items.length && !settings.keepRows ? Math.max(50, Math.min(100, Math.floor((215 - ROW2_EXTRA) / items.length))) : 50;
+  const baseH = items.length && !settings.keepRows ? Math.max(50, Math.min(100, Math.floor(200 / items.length))) : 50;
   const dataXml = [];
   const heights = [];
   for (let i = 0; i < nRows; i++) {
@@ -262,11 +252,51 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
     out.push(`<row r="${nr}" spans="1:11" ht="18" customHeight="1" x14ac:dyDescent="0.35">${cells.join("")}</row>`);
     return out;
   }
+  // ---- T&C (title + one row per line), then the "made by" details with the Kerovit logo, then the banner
+  const fillTC = styles.attr(23, "fillId");
+  const bL = styles.attr(23, "borderId"), bR = styles.attr(25, "borderId");
+  const tcA = styles.xf({ fill: fillTC, border: bL, v: "center" });
+  const tcMid = styles.xf({ fill: fillTC, border: 0, v: "center" });
+  const tcJ = styles.xf({ fill: fillTC, border: bR, v: "center" });
+  const tcTitle = styles.xf({ font: styles.addFont('<font><b/><u/><sz val="14"/><color rgb="FF1F3864"/><name val="Calibri"/><family val="2"/></font>'),
+    fill: fillTC, border: bL, h: "center", v: "center" });
+  const tailRow = (nr, ht, cellA, sA) => `<row r="${nr}" spans="1:11" ht="${ht}" customHeight="1" x14ac:dyDescent="0.35">` +
+    (cellA ? `<c r="A${nr}" s="${sA}" t="inlineStr"><is>${cellA}</is></c>` : blankCell(`A${nr}`, sA)) +
+    "BCDEFGHI".split("").map((c) => blankCell(`${c}${nr}`, tcMid)).join("") + blankCell(`J${nr}`, tcJ) + "</row>";
+  const tailMerges = [];
+  const tcStart = 32 + delta + EXTRA;
+  const tail = [];
+  let tr = tcStart;
+  tail.push(tailRow(tr, 26, richRuns(TERMS_TITLE, { sz: 14, color: "FF1F3864", bold: true }).replace("<b/>", "<b/><u/>"), tcTitle));
+  tailMerges.push(`A${tr}:J${tr}`); tr++;
+  for (const line of settings.terms) {
+    tail.push(tailRow(tr, 18, richRuns(line, { sz: 11.5 }), tcA));
+    tailMerges.push(`A${tr}:J${tr}`); tr++;
+  }
+  tail.push(tailRow(tr, 8, "", tcA)); tr++;
+  // details: thin line above, two rows of "Label : value" pairs (A:D and E:G), logo in H:J
+  const maker = q.maker === "dealer" ? "dealer" : "company";
+  const labels = MAKER_FIELDS[maker], info = Array.isArray(q.makerInfo) ? q.makerInfo : [];
+  const thin = (top, l, r) => styles.border(l ? "medium" : "none", r ? "medium" : "none", top ? "thin" : "none", "none");
+  const det = (top, l, r) => styles.xf({ fill: fillTC, border: thin(top, l, r), v: "center", wrap: true });
+  const pair = (i) => richRuns(`**  ${labels[i]} :** `, { sz: 11.5 }) + (info[i] ? richRuns(info[i], { sz: 11 }) : "");
+  const detailsRow = (nr, a, b, top) => `<row r="${nr}" spans="1:11" ht="32" customHeight="1" x14ac:dyDescent="0.35">` +
+    `<c r="A${nr}" s="${det(top, 1, 0)}" t="inlineStr"><is>${pair(a)}</is></c>` +
+    "BCD".split("").map((c) => blankCell(`${c}${nr}`, det(top, 0, 0))).join("") +
+    `<c r="E${nr}" s="${det(top, 0, 0)}" t="inlineStr"><is>${pair(b)}</is></c>` +
+    "FGHI".split("").map((c) => blankCell(`${c}${nr}`, det(top, 0, 0))).join("") + blankCell(`J${nr}`, det(top, 0, 1)) + "</row>";
+  const detRow = tr;
+  // company: Prepared By | Designation / Contact Number | Email; dealer: Dealer Name | Dealer Address / Contact Person | Contact Number
+  tail.push(detailsRow(tr, 0, 1, true)); tailMerges.push(`A${tr}:D${tr}`, `E${tr}:G${tr}`); tr++;
+  tail.push(detailsRow(tr, 2, 3, false)); tailMerges.push(`A${tr}:D${tr}`, `E${tr}:G${tr}`); tr++;
+  const bannerRow = tr;
+
   const after = [];
   for (let r = SPACER_ROW; r <= LAST_ROW; r++) {
     if (r === 29) { after.push(...summaryRows()); continue; }
     if (r === 30 || r === 31) continue;
-    const shift = r >= 32 ? delta + EXTRA : delta;
+    if (r >= 32 && r < 44) { if (r === 32) after.push(...tail); continue; }
+    const shift = r === 44 ? bannerRow - 44 : delta;
     let x = shiftRowXml(rows[r], shift);
     const nr = r + shift;
     if (r === 44 && settings.closing) {
@@ -283,31 +313,22 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
         .replace(new RegExp(`<c r="A${nr}" s="\\d+"/>`), `<c r="A${nr}" s="${gs}" t="inlineStr"><is>${rich}</is></c>`)
         .replace(/ s="19"/g, ` s="${mid}"`).replace(/ s="20"/g, ` s="${end}"`);
     }
-    if (r >= 33 && r <= 43) {
-      const term = settings.terms[r - 33];
-      if (term !== undefined) x = x.replace(new RegExp(`<c r="A${nr}" s="(\\d+)" t="s"><v>\\d+</v></c>`),
-        (_, s) => strCell(`A${nr}`, s, term));
-    }
     after.push(x);
   }
 
-  if (dealer) rows[2] = rows[2].replace(/ ht="72"/, ` ht="${72 + ROW2_EXTRA}"`);
   const before = [1, 2, 3].map((r) => rows[r]).join("");
   sheet = sheet.replace(/<sheetData>[\s\S]*<\/sheetData>/, `<sheetData>${before}${dataXml.join("")}${after.join("")}</sheetData>`);
   sheet = sheet.replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g, (m, c1, r1, c2, r2) => {
     const a = Number(r1), b = Number(r2);
-    if (a >= 29 && a <= 31) return "";          // old total rows: replaced by the totals block
-    const sh = a >= 32 ? delta + EXTRA : a >= SPACER_ROW ? delta : 0;
+    if (a >= 29) return "";          // totals and T&C rows are rebuilt above
+    const sh = a >= SPACER_ROW ? delta : 0;
     return sh ? `<mergeCell ref="${c1}${a + sh}:${c2}${b + sh}"/>` : m;
   });
-  sheet = sheet.replace("</mergeCells>", summaryMerges.map((ref) => `<mergeCell ref="${ref}"/>`).join("") + "</mergeCells>");
+  const newMerges = [...summaryMerges, ...tailMerges, ...(settings.closing ? [`A${bannerRow}:J${bannerRow}`] : [])];
+  sheet = sheet.replace("</mergeCells>", newMerges.map((ref) => `<mergeCell ref="${ref}"/>`).join("") + "</mergeCells>");
   sheet = sheet.replace(/<mergeCells count="\d+">/, () => `<mergeCells count="${(sheet.match(/<mergeCell ref=/g) || []).length}">`);
-  if (settings.closing) {
-    sheet = sheet.replace(/<mergeCells count="(\d+)">/, (_, n) => `<mergeCells count="${Number(n) + 1}">`)
-      .replace("</mergeCells>", `<mergeCell ref="A${LAST_ROW + delta + EXTRA}:J${LAST_ROW + delta + EXTRA}"/></mergeCells>`);
-  }
   sheet = sheet.replace(/<col min="5" max="16384" [^>]*\/>/, COLS_XML);
-  sheet = sheet.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="A1:K${LAST_ROW + delta + EXTRA}"/>`);
+  sheet = sheet.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="A1:K${bannerRow}"/>`);
   // print: A4, fit all columns on the page width, header row repeated on every page
   sheet = sheet.replace(/<pageSetup [^>]*\/>/, '<pageSetup paperSize="9" fitToHeight="0" orientation="portrait" r:id="rId1"/>');
   if (!sheet.includes("<sheetPr")) sheet = sheet.replace("<dimension", '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension');
@@ -317,31 +338,12 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   // ---- header text boxes (row 2)
   // left boxes span columns A–E (≈411 px), right boxes columns F–J (≈305 px)
   const addrLen = (q.address || "").length;
-  if (dealer) {
-    // Dealer / Channel Partner: left = date, dealer, contact person, type; right = address, mobile, GSTIN
-    drawing = addTextbox(drawing, "TextBox 4", "TextBox 90", 90, 0, 38100, 0);
-    drawing = addTextbox(drawing, "TextBox 7", "TextBox 91", 91, 5, 95250, 0);
-    drawing = moveTextbox(drawing, "TextBox 4", 0, 38100, 292100);
-    drawing = moveTextbox(drawing, "TextBox 90", 0, 38100, 596900);
-    drawing = moveTextbox(drawing, "TextBox 5", 0, 25400, 901700);
-    drawing = moveTextbox(drawing, "TextBox 7", 5, 95250, 596900);
-    drawing = moveTextbox(drawing, "TextBox 91", 5, 95250, 901700);
-    drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 4", "Dealer Name: ", q.customer, { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 90", "Contact Person: ", q.contact, { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 6", "Address: ", q.address,
-      { cx: 2450000, cy: addrLen > 26 ? 575000 : 264560, small: addrLen > 40 });
-    drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
-    drawing = setTextbox(drawing, "TextBox 91", "GSTIN: ", (q.gstin || "").toUpperCase(), { cx: 2400000 });
-  } else {
-    drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 4", "Customer Name: ", q.customer, { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
-    drawing = setTextbox(drawing, "TextBox 6", "Project / Site Address: ", q.address,
-      { cx: 2450000, cy: addrLen > 20 ? 575000 : 264560, small: addrLen > 30 });
-    drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
-  }
+  drawing = setTextbox(drawing, "TextBox 8", "Quotation Date: ", fmtDate(q.date), { cx: 3800000 });
+  drawing = setTextbox(drawing, "TextBox 4", "Customer Name: ", q.customer, { cx: 3800000 });
+  drawing = setTextbox(drawing, "TextBox 5", "Quotation Type: ", q.type, { cx: 3800000 });
+  drawing = setTextbox(drawing, "TextBox 6", "Project / Site Address: ", q.address,
+    { cx: 2450000, cy: addrLen > 20 ? 575000 : 264560, small: addrLen > 30 });
+  drawing = setTextbox(drawing, "TextBox 7", "Mobile Number: ", q.mobile, { cx: 2400000 });
   // Kerovit logos: fixed size at their true proportions (not stretched between cells), right edge in column J.
   // The T&C logo moves with the rows.
   drawing = drawing.replace(/<xdr:twoCellAnchor>((?:(?!<\/xdr:twoCellAnchor>)[\s\S])*?)<\/xdr:twoCellAnchor>/g, (m, inner) => {
@@ -349,7 +351,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
       `<xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>${off}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${rowOff}</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/>`) +
       "</xdr:oneCellAnchor>";
     if (m.includes('name="Picture 2"')) return one(6, 53340, 0, 82550, 1847850, 636145);
-    if (m.includes('name="Picture 9"')) return one(7, 180000, 40 + delta + EXTRA, 69851, 1320800, 454702);
+    if (m.includes('name="Picture 9"')) return one(7, 100000, detRow - 1, 120000, 1424940, 490220);
     return m;
   });
 
@@ -380,7 +382,7 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   workbook = workbook.replace(/<calcPr ([^>]*)\/>/, (m, a) => a.includes("fullCalcOnLoad") ? m : `<calcPr ${a} fullCalcOnLoad="1"/>`);
   // repeat the column headings on later pages only when the product rows don't fit on page 1
   // (A4 with 0.5" margins ≈ 770 pt printable; rows 1–3 take 186.5 pt)
-  const productsFitPage1 = 186.5 + ROW2_EXTRA + heights.reduce((a, h) => a + h, 0) <= 770;
+  const productsFitPage1 = 186.5 + heights.reduce((a, h) => a + h, 0) <= 770;
   if (!productsFitPage1 && !workbook.includes("_xlnm.Print_Titles")) {
     workbook = workbook.replace("</sheets>", '</sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">Sheet1!$3:$3</definedName></definedNames>');
   }

@@ -31,8 +31,9 @@ function newQuote() {
     number: settings.prefix + String(settings.nextNo).padStart(4, "0"),
     numbered: false,
     date: todayISO(),
-    party: "customer",
-    customer: "", contact: "", mobile: "", address: "", gstin: "",
+    maker: settings.maker || "company",
+    makerInfo: [...(settings.makerInfo?.[settings.maker || "company"] || ["", "", "", ""])],
+    customer: "", mobile: "", address: "",
     type: "Retail",
     discount: 0,
     items: [],
@@ -69,16 +70,24 @@ $("#tabs").addEventListener("click", (e) => {
 // ================================================================ quotation form
 
 function bindForm() {
-  const fields = { fCustomer: "customer", fContact: "contact", fMobile: "mobile", fGstin: "gstin",
-    fAddress: "address", fDate: "date", fNumber: "number" };
+  const fields = { fCustomer: "customer", fMobile: "mobile", fAddress: "address", fDate: "date", fNumber: "number" };
   for (const [id, key] of Object.entries(fields)) {
-    $("#" + id).addEventListener("input", (e) => { q[key] = key === "gstin" ? e.target.value.toUpperCase() : e.target.value; persist(); });
+    $("#" + id).addEventListener("input", (e) => { q[key] = e.target.value; persist(); });
   }
-  $("#partyChoices").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-party]");
-    if (!b) return;
-    q.party = b.dataset.party;
-    renderParty();
+  // "made by" details: kept on the quotation and remembered (per role) for the next one
+  [1, 2, 3, 4].forEach((n) => $("#fBy" + n).addEventListener("input", (e) => {
+    q.makerInfo[n - 1] = e.target.value;
+    const s = store.getSettings();
+    store.setSettings({ maker: q.maker, makerInfo: { ...s.makerInfo, [q.maker]: [...q.makerInfo] } });
+    persist();
+  }));
+  $("#makerChoices").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-maker]");
+    if (!b || b.dataset.maker === q.maker) return;
+    q.maker = b.dataset.maker;
+    const s = store.setSettings({ maker: q.maker });
+    q.makerInfo = [...(s.makerInfo?.[q.maker] || ["", "", "", ""])];
+    renderMaker();
     persist();
   });
   $("#typeChoices").addEventListener("click", (e) => {
@@ -108,25 +117,27 @@ function renderType() {
   $$("#typeChoices .type").forEach((b) => b.classList.toggle("active", b.dataset.type === q.type));
 }
 
-function renderParty() {
-  const dealer = q.party === "dealer";
-  $$("#partyChoices .type").forEach((b) => b.classList.toggle("active", b.dataset.party === (q.party || "customer")));
-  $("#tab-quote").classList.toggle("is-dealer", dealer);
-  $("#partyTitle").textContent = dealer ? "Dealer / Channel Partner details" : "Customer details";
-  $("#lblName").textContent = dealer ? "Dealer Name" : "Customer Name";
-  $("#lblAddress").textContent = dealer ? "Address" : "Project / Site Address";
-  $("#fCustomer").placeholder = dealer ? "e.g. Shree Sanitary Mart" : "e.g. Mr. Rajesh Patel";
-  $("#fAddress").placeholder = dealer ? "Dealer address" : "Site / project address";
+const MAKER_HINTS = {
+  company: ["e.g. Mr. K. C. Patel", "e.g. Sales Manager", "e.g. 98250 12345", "e.g. name@kerovit.com"],
+  dealer: ["e.g. Shree Sanitary Mart", "e.g. Shop 12, Ring Road, Surat", "e.g. Mr. Amit Shah", "e.g. 98250 12345"],
+};
+
+function renderMaker() {
+  if (q.maker !== "dealer") q.maker = "company";
+  if (!Array.isArray(q.makerInfo)) q.makerInfo = ["", "", "", ""];
+  $$("#makerChoices .type").forEach((b) => b.classList.toggle("active", b.dataset.maker === q.maker));
+  store.MAKER_FIELDS[q.maker].forEach((lbl, i) => {
+    $("#lblBy" + (i + 1)).textContent = lbl;
+    $("#fBy" + (i + 1)).value = q.makerInfo[i] || "";
+    $("#fBy" + (i + 1)).placeholder = MAKER_HINTS[q.maker][i];
+  });
 }
 
 function loadIntoForm() {
-  if (!q.party) q.party = "customer";
   $("#fCustomer").value = q.customer || "";
-  $("#fContact").value = q.contact || "";
   $("#fMobile").value = q.mobile || "";
-  $("#fGstin").value = q.gstin || "";
   $("#fAddress").value = q.address || "";
-  renderParty();
+  renderMaker();
   $("#fDate").value = q.date || todayISO();
   $("#fNumber").value = q.number || "";
   $("#fDiscount").value = q.discount || 0;
@@ -293,8 +304,7 @@ function checkReady() {
   if (!q.items.length) { toast("Add at least one product first.", true); return false; }
   const bad = q.items.find((it) => !(Number(it.qty) > 0));
   if (bad) { toast(`Quantity missing for ${bad.code}.`, true); return false; }
-  const who = q.party === "dealer" ? "Dealer" : "Customer";
-  if (!q.customer.trim() && !confirm(`${who} name is empty. Download anyway?`)) return false;
+  if (!q.customer.trim() && !confirm("Customer name is empty. Download anyway?")) return false;
   return true;
 }
 
@@ -326,10 +336,10 @@ $("#btnSave").addEventListener("click", () => saveQuote(false));
 async function renderSaved() {
   const all = (await store.listQuotes()).sort((a, b) => (b.updated || "").localeCompare(a.updated || ""));
   const f = $("#savedFilter").value.trim().toLowerCase();
-  const list = all.filter((x) => !f || [x.number, x.customer, x.contact, x.mobile, x.address, x.gstin].join(" ").toLowerCase().includes(f));
+  const list = all.filter((x) => !f || [x.number, x.customer, x.mobile, x.address, ...(x.makerInfo || [])].join(" ").toLowerCase().includes(f));
   $("#savedTable tbody").innerHTML = list.map((x) => `<tr data-id="${esc(x.id)}">
       <td><b>${esc(x.number)}</b></td><td>${esc(fmtDate(x.date))}</td>
-      <td>${esc(x.customer || "—")}${x.party === "dealer" ? ' <span class="muted" style="font-size:11px">(Dealer)</span>' : ""}<div class="muted" style="font-size:12px">${esc(x.mobile || "")}</div></td>
+      <td>${esc(x.customer || "—")}${x.maker === "dealer" ? ` <span class="muted" style="font-size:11px">(by ${esc(x.makerInfo?.[0] || "dealer")})</span>` : ""}<div class="muted" style="font-size:12px">${esc(x.mobile || "")}</div></td>
       <td>${esc(x.type)}</td><td class="r">${x.items.length}</td><td class="r"><b>${rupee(x.grand || 0)}</b></td>
       <td style="white-space:nowrap">
         <button class="btn" data-act="open">Open</button>
@@ -527,7 +537,7 @@ function saveSettingsForm() {
     nextNo: Math.max(1, Number($("#sNextNo").value) || 1),
     prefix: $("#sPrefix").value,
     keepRows: $("#sKeepRows").checked,
-    terms: $("#sTerms").value.split("\n").map((s) => s.trim()).filter(Boolean),
+    terms: $("#sTerms").value.split("\n").map((s) => s.trimEnd()).filter((s) => s.trim()),
     closing: $("#sClosing").value.trim() || store.DEFAULT_CLOSING,
   });
   renderTotals();
