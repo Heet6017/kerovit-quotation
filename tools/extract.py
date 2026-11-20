@@ -101,17 +101,24 @@ def finish_of(code):
     return FINISH.get(m.group(1), "") if m else ""
 
 
-def product_images(page):
-    """Product photo rectangles on the page (excludes QR codes, icons, full-page photos)."""
+def product_images(page, squares=False):
+    """Product photo rectangles on the page (excludes QR codes, icons, full-page photos).
+    squares=True keeps small square pictures: a small square product photo (e.g. a robe hook) looks
+    like a QR code by size, but the photo cell above a Klassic code never holds a QR code."""
     W, H = page.rect.width, page.rect.height
     rects = []
-    for info in page.get_image_info():
+    infos = page.get_image_info()
+    # QR codes / feature icons come in a repeated size on the page; a product photo has its own size
+    size_n = collections.Counter((round(i["bbox"][2] - i["bbox"][0]), round(i["bbox"][3] - i["bbox"][1])) for i in infos)
+    for info in infos:
         r = pymupdf.Rect(info["bbox"]) & page.rect
         if r.is_empty or r.width < 4 or r.height < 4 or r.width > W - 20:
             continue
         if r.width * r.height > 0.25 * W * H:          # lifestyle photo
             continue
-        if abs(r.width - r.height) < 4 and r.width < 45:  # QR code / feature icon
+        b = info["bbox"]
+        repeated = size_n[(round(b[2] - b[0]), round(b[3] - b[1]))] >= 3
+        if abs(r.width - r.height) < 4 and r.width < 45 and (repeated or not squares):  # QR code / feature icon
             continue
         rects.append(r)
     return rects
@@ -238,7 +245,7 @@ def generic_page(page, coll, state):
         if coll == "KLASSIC":
             # the cell above the code, down from the previous product's price line in this column
             top = max([q["y1"] for q in prices if abs(q["x0"] - c["x0"]) < 20 and q["y1"] < c["y0"]] + [c["y0"] - 170])
-            img = union_in(imgs, c["x0"] - 15, top, c["x0"] + 150, c["y0"])
+            img = union_in(product_images(page, squares=True), c["x0"] - 15, top, c["x0"] + 150, c["y0"])
         else:
             # the strip left of the code, between the rows above and below
             col = sorted([o for o in codes if abs(o["x0"] - c["x0"]) < 20], key=lambda o: o["y0"])

@@ -114,7 +114,8 @@ async function loadBuiltIn() {
 // Raise when the built-in database is restructured: older copies saved in a browser are then replaced.
 // rev 2: WC / basin "Set" tables split into Complete Set + bowl/basin only + parts with their own codes.
 // rev 3: one photo per vanity on multi-product pages; codes printed together (KA870009 / KA870010) get one row each.
-export const DB_REV = 3;
+// rev 4: small square product photos (robe hook, body jets, nipples) no longer mistaken for QR codes.
+export const DB_REV = 4;
 export let dbUpgraded = false;
 
 export async function loadProducts() {

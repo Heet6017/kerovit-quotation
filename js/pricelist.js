@@ -151,14 +151,19 @@ async function readPage(page) {
   return { L, W, H, imgs, text };
 }
 
-function productImages(pg) {
+// squares=true keeps small square product photos (e.g. a robe hook): only squares whose size repeats
+// on the page (QR codes, feature icons) are dropped - same as tools/extract.py
+function productImages(pg, squares = false) {
   const { W, H } = pg;
   const out = [];
+  const sz = (r) => `${Math.round(rw(r))}x${Math.round(rh(r))}`;
+  const n = new Map();
+  for (const r of pg.imgs) n.set(sz(r), (n.get(sz(r)) || 0) + 1);
   for (const r0 of pg.imgs) {
     const r = R(Math.max(0, r0.x0), Math.max(0, r0.y0), Math.min(W, r0.x1), Math.min(H, r0.y1));
     if (rw(r) < 4 || rh(r) < 4 || rw(r) > W - 20) continue;
     if (rw(r) * rh(r) > 0.25 * W * H) continue;
-    if (Math.abs(rw(r) - rh(r)) < 4 && rw(r) < 45) continue;
+    if (Math.abs(rw(r) - rh(r)) < 4 && rw(r) < 45 && (n.get(sz(r0)) >= 3 || !squares)) continue;
     out.push(r);
   }
   return out;
@@ -253,7 +258,7 @@ function genericPage(pg, coll, st) {
     let img;
     if (coll === "KLASSIC") {
       const top = Math.max(...prices.filter((q) => Math.abs(q.x0 - c.x0) < 20 && q.y1 < c.y0).map((q) => q.y1), c.y0 - 170);
-      img = unionIn(imgs, c.x0 - 15, top, c.x0 + 150, c.y0);
+      img = unionIn(productImages(pg, true), c.x0 - 15, top, c.x0 + 150, c.y0);
     } else {
       const col = codes.filter((o) => Math.abs(o.x0 - c.x0) < 20).sort((a, b) => a.y0 - b.y0);
       const i = col.indexOf(c);
