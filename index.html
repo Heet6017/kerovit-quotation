@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f4e78">
 <title>Kerovit Quotation Maker</title>
 <link rel="icon" href="assets/logo-kerovit.png">
-<link rel="stylesheet" href="css/app.css?v=202611220716">
+<link rel="stylesheet" href="css/app.css?v=202611220731">
 </head>
 <body>
 <header class="topbar">
@@ -16,11 +17,12 @@
       <div class="brand-sub" id="priceListBadge">Loading price list…</div>
     </div>
   </div>
+  <!-- on phones this becomes the bottom navigation bar (icons shown there only) -->
   <nav class="tabs" id="tabs">
-    <button data-tab="quote" class="active">New Quotation</button>
-    <button data-tab="saved">Saved</button>
-    <button data-tab="prices">Price List</button>
-    <button data-tab="settings">Settings</button>
+    <button data-tab="quote" class="active"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg><span>New Quotation</span></button>
+    <button data-tab="saved"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg><span>Saved</span></button>
+    <button data-tab="prices"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><span>Price List</span></button>
+    <button data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
   </nav>
 </header>
 
@@ -220,13 +222,13 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/app.js": "./js/app.js?v=202611220716",
-    "./js/store.js": "./js/store.js?v=202611220716",
-    "./js/common.js": "./js/common.js?v=202611220716",
-    "./js/search.js": "./js/search.js?v=202611220716",
-    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611220716",
-    "./js/pdf-export.js": "./js/pdf-export.js?v=202611220716",
-    "./js/pricelist.js": "./js/pricelist.js?v=202611220716"
+    "./js/app.js": "./js/app.js?v=202611220731",
+    "./js/store.js": "./js/store.js?v=202611220731",
+    "./js/common.js": "./js/common.js?v=202611220731",
+    "./js/search.js": "./js/search.js?v=202611220731",
+    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611220731",
+    "./js/pdf-export.js": "./js/pdf-export.js?v=202611220731",
+    "./js/pricelist.js": "./js/pricelist.js?v=202611220731"
   }
 }
 </script>

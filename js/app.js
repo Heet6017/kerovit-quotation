@@ -62,6 +62,7 @@ $("#tabs").addEventListener("click", (e) => {
   if (!b) return;
   $$("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
   $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
+  window.scrollTo({ top: 0, behavior: "instant" });
   if (b.dataset.tab === "saved") renderSaved();
   if (b.dataset.tab === "prices") renderPriceTab();
   if (b.dataset.tab === "settings") renderSettings();
@@ -195,6 +196,7 @@ function moveSel(d) {
 
 function addProduct(p) {
   const existing = q.items.find((it) => it.pid === p.id);
+  flashIndex = existing ? q.items.indexOf(existing) : q.items.length;
   if (existing) {
     existing.qty = (Number(existing.qty) || 0) + 1;
     toast(`${p.code}: quantity is now ${existing.qty}`);
@@ -225,31 +227,33 @@ document.addEventListener("click", (e) => { if (!e.target.closest(".search-wrap"
 
 // ================================================================ items table
 
+let flashIndex = -1;          // line to highlight once (just added / quantity raised)
 function renderItems() {
   const tb = $("#items tbody");
   tb.innerHTML = q.items.map((it, i) => {
     const { rate, total } = calcLine(it);
-    return `<tr data-i="${i}">
-      <td>${i + 1}</td>
-      <td><img class="thumb" src="${esc(store.imageURLSync({ image: it.image }))}" alt="" onerror="this.style.visibility='hidden'"></td>
-      <td>
+    return `<tr data-i="${i}"${i === flashIndex ? ' class="row-new"' : ""}>
+      <td class="c-no">${i + 1}</td>
+      <td class="c-img"><img class="thumb" src="${esc(store.imageURLSync({ image: it.image }))}" alt="" onerror="this.style.visibility='hidden'"></td>
+      <td class="c-prod">
         <div class="code">${esc(it.code)}</div>
         <input class="pname" data-k="label" value="${esc(it.label)}" title="Product name as printed (you can edit it)">
         <input class="psize" data-k="size" value="${esc(it.size || "")}" placeholder="Size (optional)" title="Size printed under the product name (you can edit it)">
         <div class="series">${esc(it.series)}</div>
       </td>
-      <td class="money">${rupee(it.mrp)}</td>
-      <td><input class="num" data-k="qty" type="number" min="0" step="1" value="${esc(it.qty)}"></td>
-      <td><input class="num" data-k="disc" type="number" min="0" max="100" step="0.5" value="${esc(it.disc)}"
+      <td class="money c-mrp" data-label="MRP">${rupee(it.mrp)}</td>
+      <td class="c-qty" data-label="Qty"><input class="num" data-k="qty" type="number" min="0" step="1" value="${esc(it.qty)}"></td>
+      <td class="c-disc" data-label="Disc %"><input class="num" data-k="disc" type="number" min="0" max="100" step="0.5" value="${esc(it.disc)}"
            title="${it.custom ? "Custom discount for this line" : "Follows the quotation discount"}"
            style="${it.custom ? "border-color:#b26a00" : ""}"></td>
-      <td class="money">${rupee(rate)}</td>
-      <td class="money total">${rupee(total)}</td>
-      <td><div style="display:flex;align-items:center">
+      <td class="money c-rate" data-label="Rate">${rupee(rate)}</td>
+      <td class="money total c-total" data-label="Total">${rupee(total)}</td>
+      <td class="c-act"><div class="act-wrap">
         <div class="mv"><button class="icon-btn" data-act="up" title="Move up">▲</button><button class="icon-btn" data-act="down" title="Move down">▼</button></div>
         <button class="icon-btn" data-act="del" title="Remove">✕</button></div></td>
     </tr>`;
   }).join("");
+  flashIndex = -1;
   $("#emptyItems").hidden = q.items.length > 0;
   $("#itemCount").textContent = q.items.length ? `${q.items.length} product${q.items.length > 1 ? "s" : ""}` : "";
   renderTotals();
@@ -262,7 +266,12 @@ function renderTotals() {
   $("#tSub").textContent = rupee(t.sub);
   $("#tGstLabel").textContent = `Total TAX (GST ${settings.gst}%)`;
   $("#tGst").textContent = rupee(t.gst);
-  $("#tGrand").textContent = rupee(t.net, 0);
+  const g = $("#tGrand"), net = rupee(t.net, 0);
+  if (g.textContent !== net && g.textContent) {   // short pulse so the change is noticed
+    const box = g.closest(".grand");
+    box.classList.remove("pulse"); void box.offsetWidth; box.classList.add("pulse");
+  }
+  g.textContent = net;
   $("#tWords").innerHTML = q.items.length ? `<b>Amount (In Words):</b> ${esc(amountInWords(t.net))}` : "";
 }
 
@@ -328,6 +337,7 @@ async function exportWith(btn, fn, ext) {
   btn.disabled = true;
   try {
     btn.textContent = "Preparing…";
+    btn.classList.add("busy");
     fillSizes();
     await saveQuote(true);
     const blob = await fn(q, { ...settings, terms: settings.terms }, (i, n) => { btn.textContent = `Photos ${i + 1}/${n}…`; });
@@ -338,6 +348,7 @@ async function exportWith(btn, fn, ext) {
     toast("Could not create the file: " + err.message, true);
   } finally {
     btn.disabled = false;
+    btn.classList.remove("busy");
     btn.textContent = old;
   }
 }
@@ -353,7 +364,7 @@ async function renderSaved() {
   const f = $("#savedFilter").value.trim().toLowerCase();
   const list = all.filter((x) => !f || [x.number, x.customer, x.mobile, x.address, ...(x.makerInfo || [])].join(" ").toLowerCase().includes(f));
   $("#savedTable tbody").innerHTML = list.map((x) => `<tr data-id="${esc(x.id)}">
-      <td><b>${esc(x.number)}</b></td><td>${esc(fmtDate(x.date))}</td>
+      <td data-sub="${esc(` · ${fmtDate(x.date)} · ${x.type} · ${x.items.length} item${x.items.length === 1 ? "" : "s"}`)}"><b>${esc(x.number)}</b></td><td>${esc(fmtDate(x.date))}</td>
       <td>${esc(x.customer || "—")}${x.maker === "dealer" ? ` <span class="muted" style="font-size:11px">(by ${esc(x.makerInfo?.[0] || "dealer")})</span>` : ""}<div class="muted" style="font-size:12px">${esc(x.mobile || "")}</div></td>
       <td>${esc(x.type)}</td><td class="r">${x.items.length}</td><td class="r"><b>${rupee(x.grand || 0)}</b></td>
       <td style="white-space:nowrap">
@@ -623,3 +634,6 @@ $("#btnExportEnc").addEventListener("click", async () => {
 
 // for debugging / automated checks
 window.__kq = { get q() { return q; }, store, buildXlsx, buildPdf, search };
+
+// header gets a soft shadow once the page is scrolled
+window.addEventListener("scroll", () => document.body.classList.toggle("scrolled", window.scrollY > 4), { passive: true });

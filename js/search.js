@@ -53,7 +53,10 @@ export function search(q, limit = 40) {
   }
   // a WC/basin sold as a set: the complete set first, then the bowl/basin alone, then loose parts
   const rank = (p) => ({ set: 0, single: 2, part: 3 }[p.kind] ?? 1);
-  out.sort((a, b) => b.score - a.score || a.e.p.code.localeCompare(b.e.p.code) || rank(a.e.p) - rank(b.e.p) || a.e.p.mrp - b.e.p.mrp);
+  // loose parts (seat covers, cisterns, pedestals) come after the products themselves in word searches
+  const isPart = (p) => (p.kind === "part" ? 1 : 0);
+  out.sort((a, b) => b.score - a.score || isPart(a.e.p) - isPart(b.e.p) || a.e.p.code.localeCompare(b.e.p.code) ||
+    rank(a.e.p) - rank(b.e.p) || a.e.p.mrp - b.e.p.mrp);
   // same code + option listed under several series -> show once
   const seen = new Set(), res = [];
   for (const { e } of out) {

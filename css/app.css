@@ -207,12 +207,176 @@ table { border-collapse: collapse; width: 100%; }
 }
 .toast.err { background: var(--bad); }
 
+/* =====================================================================================
+   Motion: short, quiet transitions (150–320 ms, ease-out). All of it is switched off
+   when the device asks for reduced motion (see the end of this file).
+   ===================================================================================== */
+:root { --ease: cubic-bezier(.22, .61, .36, 1); }
+.ti { display: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.topbar { transition: box-shadow .25s var(--ease); }
+body.scrolled .topbar { box-shadow: 0 4px 18px rgba(20, 40, 70, .08); }
+.tabs button { transition: background-color .2s var(--ease), color .2s var(--ease), transform .15s var(--ease); }
+.tabs button:active { transform: scale(.96); }
+
+/* tab switch: the page fades in and rises a little; cards follow one after another */
+@keyframes kq-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes kq-fade { from { opacity: 0; } to { opacity: 1; } }
+.tab.active { animation: kq-fade .25s var(--ease) both; }
+.tab.active > .card, .tab.active > .steps > .card { animation: kq-rise .38s var(--ease) both; }
+.tab.active > .card:nth-child(2), .tab.active > .steps > .card:nth-child(2) { animation-delay: .05s; }
+.tab.active > .card:nth-child(3), .tab.active > .steps > .card:nth-child(3) { animation-delay: .10s; }
+.tab.active > .card:nth-child(4), .tab.active > .steps > .card:nth-child(4) { animation-delay: .15s; }
+
+/* buttons and choices: a gentle lift on hover, a press on click */
+.btn, .type { transition: background-color .2s var(--ease), border-color .2s var(--ease), color .2s var(--ease),
+  box-shadow .2s var(--ease), transform .15s var(--ease); }
+.btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(20, 40, 70, .10); }
+.btn:active:not(:disabled), .type:active { transform: translateY(0) scale(.98); box-shadow: none; }
+.type.active { box-shadow: 0 6px 16px rgba(31, 78, 120, .22); }
+.card { transition: box-shadow .25s var(--ease); }
+.card:focus-within { box-shadow: 0 6px 22px rgba(20, 40, 70, .07); }
+input, select, textarea { transition: border-color .2s var(--ease), box-shadow .2s var(--ease); }
+
+/* step numbers fill in once the step has content */
+.card-head .num { transition: transform .3s var(--ease); }
+.card:focus-within .card-head .num { transform: scale(1.08); }
+
+/* search results drop down smoothly */
+@keyframes kq-drop { from { opacity: 0; transform: translateY(-6px) scale(.99); } to { opacity: 1; transform: none; } }
+.results:not([hidden]) { animation: kq-drop .18s var(--ease) both; transform-origin: top center; }
+.res { transition: background-color .12s; }
+
+/* a line just added (or whose quantity went up) slides in with a soft highlight */
+@keyframes kq-row-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes kq-row-glow { 0% { background-color: #fff4cc; } 100% { background-color: transparent; } }
+.items tr.row-new { animation: kq-row-in .3s var(--ease) both, kq-row-glow 1.6s .1s ease-out both; }
+
+/* Net Amount pulses once when it changes */
+@keyframes kq-pulse { 0% { box-shadow: 0 0 0 0 rgba(31, 78, 120, .35); } 100% { box-shadow: 0 0 0 10px rgba(31, 78, 120, 0); } }
+.totals .grand.pulse { animation: kq-pulse .7s ease-out; }
+.totals .grand b { transition: color .3s; }
+
+/* download in progress: small spinner inside the button */
+@keyframes kq-spin { to { transform: rotate(360deg); } }
+.btn.busy::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor;
+  border-right-color: transparent; animation: kq-spin .7s linear infinite; }
+
+/* toast rises in; lock screen card rises in */
+@keyframes kq-toast { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.toast:not([hidden]) { animation: kq-toast .25s var(--ease) both; }
+.lock:not([hidden]) .lock-card { animation: kq-rise .45s var(--ease) both; }
+.empty { animation: kq-fade .4s var(--ease) both; }
+.progress .bar { transition: width .3s var(--ease); }
+
+/* =====================================================================================
+   Phones and small tablets
+   ===================================================================================== */
 @media (max-width: 720px) {
-  .topbar { padding: 10px 16px; }
-  .grid2 { grid-template-columns: 1fr; }
+  body { font-size: 15px; }
+  /* compact header; the tabs become a bottom navigation bar with icons */
+  .topbar { padding: 8px 14px; gap: 10px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .brand img { height: 30px; }
+  .brand-title { font-size: 15px; }
+  .brand-sub { font-size: 11px; }
+  .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; margin: 0;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    background: rgba(255, 255, 255, .96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(20, 40, 70, .06);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabs button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px;
+    font-size: 11px; font-weight: 600; border-radius: 10px; min-height: 52px; justify-content: center; }
+  .tabs button.active { background: var(--tint2); color: var(--navy-d); }
+  .tabs button.active .ti { transform: translateY(-1px); }
+  .ti { display: block; transition: transform .2s var(--ease); }
+  main { padding: 12px 10px calc(96px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); text-align: center; }
+
+  .card { padding: 14px 12px; border-radius: 12px; margin-bottom: 12px; }
+  .card-head { flex-wrap: wrap; margin-bottom: 12px; }
+  .card-head h2 { font-size: 15px; }
+  .card-head .small-input { max-width: none; width: 100%; }
+  .grid2 { grid-template-columns: 1fr; gap: 10px; }
   .span2 { grid-column: span 1; }
-  .types { grid-template-columns: 1fr; }
-  .tabs { margin-left: 0; }
+  /* 16 px text in inputs stops phones from zooming in on tap */
+  input, select, textarea { font-size: 16px; padding: 10px 12px; }
+  .types { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .types.party { grid-template-columns: 1fr 1fr; }
+  .type { padding: 12px 6px; font-size: 12px; letter-spacing: .2px; line-height: 1.25; min-height: 52px; }
+  .maker-grid { padding: 10px; }
+  .disc-row label { width: 100%; }
+  .disc-row .hint { min-width: 0; }
+  .actions .btn { flex: 1 1 100%; justify-content: center; padding: 12px 16px; }
+  .btn { min-height: 44px; }
+  #btnNew { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+  .results { max-height: 62vh; border-radius: 12px; }
+  .res { grid-template-columns: 48px 1fr; gap: 10px; padding: 10px; }
+  .res img { width: 48px; height: 48px; }
+  .res .price { grid-column: 2; font-size: 14px; color: var(--navy-d); }
+
+  /* product lines become cards: photo + name, then Qty / Disc % / MRP and Rate / Total */
+  .table-wrap { overflow: visible; }
+  .items thead { display: none; }
+  .items, .items tbody { display: block; }
+  .items tbody tr {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 10px; align-items: center;
+    background: #fff !important; border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(20, 40, 70, .05);
+  }
+  .items td { padding: 0; border: 0; min-width: 0; }
+  .items td:nth-child(3) { min-width: 0; width: auto; }
+  .items .c-no { display: none; }
+  .items .c-img { grid-column: 1 / span 1; grid-row: 1; align-self: start; }
+  .items .c-img .thumb { width: 52px; height: 52px; }
+  .items .c-prod { grid-column: 2 / span 4; grid-row: 1; }
+  .items .c-act { grid-column: 6; grid-row: 1; align-self: start; justify-self: end; }
+  .items .c-qty { grid-column: 1 / span 2; grid-row: 2; }
+  .items .c-disc { grid-column: 3 / span 2; grid-row: 2; }
+  .items .c-mrp { grid-column: 5 / span 2; grid-row: 2; text-align: right; align-items: flex-end; }
+  .items .c-rate { grid-column: 1 / span 3; grid-row: 3; }
+  .items .c-total { grid-column: 4 / span 3; grid-row: 3; }
+  .items td[data-label] { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+  .items td[data-label]::before { content: attr(data-label); font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .4px; }
+  .items .c-rate, .items .c-total { border-top: 1px solid #edf1f5; padding-top: 8px; }
+  .items .c-total { text-align: right; align-items: flex-end; color: var(--navy-d); font-size: 16px; }
+  .items input.num { width: 100%; text-align: center; }
+  .items .pname { margin-left: -6px; font-size: 14px; font-weight: 600; }
+  .items .psize { font-size: 13px; }
+  .act-wrap { display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 2px; }
+  .act-wrap .mv { flex-direction: row; }
+  .icon-btn { min-width: 32px; min-height: 32px; }
+  .totals { max-width: none; }
+  .totals .grand { font-size: 17px; }
+
+  /* saved quotations: one card per quotation (customer + amount, then number / date / type, then buttons) */
+  #savedTable thead { display: none; }
+  #savedTable, #savedTable tbody { display: block; white-space: normal; }
+  #savedTable tbody tr { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
+    background: #fff !important; border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px;
+    animation: kq-rise .3s var(--ease) both; }
+  #savedTable td { padding: 0; border: 0; }
+  #savedTable td:nth-child(3) { grid-column: 1; grid-row: 1; font-weight: 600; }
+  #savedTable td:nth-child(6) { grid-column: 2; grid-row: 1; text-align: right; color: var(--navy-d); }
+  #savedTable td:nth-child(1), #savedTable td:nth-child(2), #savedTable td:nth-child(4), #savedTable td:nth-child(5) {
+    grid-row: 2; font-size: 12px; color: var(--muted); display: inline; }
+  #savedTable td:nth-child(1) { grid-column: 1; }
+  #savedTable td:nth-child(2), #savedTable td:nth-child(4), #savedTable td:nth-child(5) { display: none; }
+  #savedTable td:nth-child(1)::after { content: attr(data-sub); }
+  #savedTable td:nth-child(7) { grid-column: 1 / -1; grid-row: 3; display: flex; gap: 8px; margin-top: 6px; white-space: normal !important; }
+  #savedTable td:nth-child(7) .btn { flex: 1; justify-content: center; }
+  /* price list table scrolls sideways inside its card */
+  table.list:not(#savedTable) { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+  .upload-row label:not(.btn) { min-width: 0; width: 100%; }
+  .upload-row .btn { width: 100%; justify-content: center; }
+  .lock-card { padding: 24px 18px; }
+}
+@media (min-width: 721px) { .act-wrap { display: flex; align-items: center; } }
+
+/* respect "reduce motion" */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
 }
 .set-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: #1f3864; color: #fff; font-size: 11px; font-weight: 700; line-height: 17px; vertical-align: 1px; }
 .items .psize { width: 100%; border: 1px solid transparent; padding: 1px 5px; margin-left: -6px; font-size: 12px; color: #4a5a6a; background: transparent; }
