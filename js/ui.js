@@ -112,6 +112,11 @@ function countUp(el) {
 }
 ["#tQty", "#tMrp", "#tSub", "#tGst", "#tGrand"].forEach((s) => { const el = $(s); if (el) countUp(el); });
 
+// ---------------------------------------------------------------- installable app (offline helper)
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+
 // ---------------------------------------------------------------- step numbers turn into ticks
 const steps = $$("#tab-quote .steps > .card");
 function updateSteps() {
