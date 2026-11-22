@@ -240,7 +240,8 @@ function genericPage(pg, coll, st) {
     for (const l of L) {
       if (l.y0 <= c.y0 + 1 || Math.abs(l.x0 - c.x0) > 3) continue;
       if (l.y0 - lastY > 16) break;
-      if (CODE_LINE.test(l.t) && l.bold) { lastY = l.y1; continue; }
+      // the next product's code ends this name; codes stacked above a shared name are skipped
+      if (CODE_LINE.test(l.t) && l.bold) { if (nameLines.length) break; lastY = l.y1; continue; }
       if (new RegExp(`Per Piece|^${RUPEE}?\\s*(${NUM})$`).test(l.t)) {
         if (coll === "KLASSIC") break;
         lastY = l.y1; continue;
@@ -552,11 +553,15 @@ export async function parsePriceList(file, coll, onProgress = () => {}) {
           const before = o.before.filter((x) => !desc.includes(x) && !(SPEC.test(x) && !(trapVaries && x.includes("Trap"))));
           const variant = oi === 0 && !o.before.length && o.label ? o.label : clean([...before, ...(o.label ? [o.label] : [])].join(" "));
           const nm = it.name ? `${it.name} ${it.sub}`.trim() : (desc[0] || it.sub);
+          let details = desc.join("; ") || it.rows.filter((r) => SPEC.test(r) && !PRICE_IN.test(r)).map(clean).join("; ");
+          if (!/\bSize\b/i.test(details)) {   // the size line can sit below a "with ..." line
+            details = [details, ...it.rows.filter((r) => /^Size\b/i.test(r)).map(clean)].filter(Boolean).join("; ");
+          }
           add(pn, {
             category: "Sanitaryware", series: it.name || it.sub, sub: it.sub, code: o.code, name: nm, mrp: o.price, img: it.img,
             alt_codes: o.code === it.codes[0] ? it.codes.filter((c) => c !== o.code) : [],
             variant: clean(variant).replace(/`/g, "₹"),
-            details: desc.join("; ") || it.rows.filter((r) => SPEC.test(r) && !PRICE_IN.test(r)).map(clean).join("; "),
+            details,
             flag: o.flag ? "Price looks mis-printed in PDF - verify" : "",
             colour: it.head.includes("White") || it.rows.join(" ").includes("White") ? "White" : "",
           });

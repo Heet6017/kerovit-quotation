@@ -14,7 +14,8 @@ const COL_E_PX = 100;          // photo column widened to 14.29 (≈100 px); Qty
 const COLS_XML = '<col min="5" max="5" width="14.2890625" style="1" customWidth="1"/><col min="6" max="6" width="8.7265625" style="1"/>' +
   '<col min="7" max="8" width="6" style="1" customWidth="1"/><col min="9" max="16384" width="8.7265625" style="1"/>';
 
-const CREAM = "FFFFF9F3", NAVY = "FF1F487C";
+// page background: pure white (the format image had a cream tint that printed yellowish)
+const CREAM = "FFFFFFFF", NAVY = "FF1F487C";
 const xmlEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const colOf = (i) => "ABCDEFGHIJK"[i];
 
@@ -200,12 +201,18 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
     if (it) {
       const { rate, total } = calcLine(it);
       const name = it.label;
-      ht = Math.max(baseH, lines(name, 20) * 11.5 + 8, lines(it.series, 10) * 11.5 + 8, lines(it.code, 12) * 11.5 + 8);
+      const size = String(it.size || "").trim();
+      ht = Math.max(baseH, (lines(name, 20) + (size ? lines(size, 22) : 0)) * 11.5 + 8,
+        lines(it.series, 10) * 11.5 + 8, lines(it.code, 12) * 11.5 + 8);
       cells = [
         numCell(`A${r}`, st.A, i + 1),
         strCell(`B${r}`, st.B, it.series),
         strCell(`C${r}`, st.C, it.code),
-        strCell(`D${r}`, st.D, name),
+        // product name in bold, the size below it in regular text
+        size ? `<c r="D${r}" s="${st.D}" t="inlineStr"><is>` +
+          `<r><rPr><b/><sz val="9"/><color rgb="FF000000"/><rFont val="Arial"/><family val="2"/></rPr><t xml:space="preserve">${xmlEsc(name)}</t></r>` +
+          `<r><rPr><sz val="8.5"/><color rgb="FF000000"/><rFont val="Arial"/><family val="2"/></rPr><t xml:space="preserve">&#10;${xmlEsc(size)}</t></r></is></c>`
+          : strCell(`D${r}`, st.D, name),
         blankCell(`E${r}`, st.E),
         numCell(`F${r}`, st.F, it.mrp),
         numCell(`G${r}`, st.G, Number(it.qty) || 0),
@@ -437,6 +444,27 @@ export async function buildXlsx(q, settings, onProgress = () => {}) {
   sheet = sheet.replace(/<mergeCells count="\d+">/, () => `<mergeCells count="${(sheet.match(/<mergeCell ref=/g) || []).length}">`);
   sheet = sheet.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="A1:K${bannerRow + 1}"/>`);
   drawing = drawing.replace(/<xdr:row>(\d+)<\/xdr:row>/g, (m, r) => Number(r) >= 1 ? `<xdr:row>${Number(r) + 1}</xdr:row>` : m);
+
+  // keep Terms & Conditions + details + banner on one page: when the page would end inside that
+  // block, start a new page at its title (printable A4 height ≈ 800 pt of rows at fit-to-width)
+  {
+    const PAGE = 800, tcFirst = tcStart + 1, tcLast = bannerRow + 1;   // +1: the QUOTATION row
+    let acc = 0, breakAfter = 0;
+    for (const m of sheet.matchAll(/<row r="(\d+)"([^>]*)>/g)) {
+      const r = Number(m[1]), h = Number((m[2].match(/ ht="([\d.]+)"/) || [0, 15])[1]);
+      if (r === tcFirst && acc > 0) {
+        const blockH = [...sheet.matchAll(/<row r="(\d+)"([^>]*)>/g)].filter((x) => +x[1] >= tcFirst && +x[1] <= tcLast)
+          .reduce((a, x) => a + Number((x[2].match(/ ht="([\d.]+)"/) || [0, 15])[1]), 0);
+        if (acc + blockH > PAGE && blockH <= PAGE) breakAfter = r - 1;
+        break;
+      }
+      acc += h;
+      if (acc > PAGE) acc = h;   // a new printed page starts with this row
+    }
+    if (breakAfter) {
+      sheet = sheet.replace(/(<pageSetup [^>]*\/>)/, `$1<rowBreaks count="1" manualBreakCount="1"><brk id="${breakAfter}" max="16383" man="1"/></rowBreaks>`);
+    }
+  }
 
   zip.file("xl/worksheets/sheet1.xml", sheet);
   zip.file("xl/drawings/drawing1.xml", drawing);

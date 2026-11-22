@@ -115,7 +115,8 @@ async function loadBuiltIn() {
 // rev 2: WC / basin "Set" tables split into Complete Set + bowl/basin only + parts with their own codes.
 // rev 3: one photo per vanity on multi-product pages; codes printed together (KA870009 / KA870010) get one row each.
 // rev 4: small square product photos (robe hook, body jets, nipples) no longer mistaken for QR codes.
-export const DB_REV = 4;
+// rev 5: size lines kept for one-piece WCs listed "with In-Built Jet" (KSP712RLW-JET, KSP709RLW-JET).
+export const DB_REV = 5;
 export let dbUpgraded = false;
 
 export async function loadProducts() {

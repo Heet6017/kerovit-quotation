@@ -1,6 +1,6 @@
 import * as store from "./store.js";
 import { buildIndex, search, highlight } from "./search.js";
-import { esc, rupee, inr, calcLine, calcQuote, seriesLabel, productLabel, todayISO, fmtDate, fileBase, download, amountInWords } from "./common.js";
+import { esc, rupee, inr, calcLine, calcQuote, seriesLabel, productLabel, sizeOf, todayISO, fmtDate, fileBase, download, amountInWords } from "./common.js";
 import { buildXlsx } from "./xlsx-export.js";
 import { buildPdf } from "./pdf-export.js";
 import { parsePriceList, diffPriceList, applyPriceList } from "./pricelist.js";
@@ -43,7 +43,7 @@ function newQuote() {
 
 function itemFromProduct(p) {
   return {
-    pid: p.id, code: p.code, series: seriesLabel(p), label: productLabel(p),
+    pid: p.id, code: p.code, series: seriesLabel(p), label: productLabel(p), size: sizeOf(p),
     mrp: p.mrp, qty: 1, disc: Number(q.discount) || 0, custom: false,
     image: p.image || "", collection: p.collection,
   };
@@ -133,7 +133,19 @@ function renderMaker() {
   });
 }
 
+// lines added before sizes were printed: take the size from the price list once it is loaded
+function fillSizes() {
+  const list = store.getProducts() || [];
+  if (!list.length) return;
+  for (const it of q.items) {
+    if (it.size !== undefined || !it.pid) continue;
+    const p = list.find((x) => x.id === it.pid);
+    if (p) it.size = sizeOf(p);
+  }
+}
+
 function loadIntoForm() {
+  fillSizes();
   $("#fCustomer").value = q.customer || "";
   $("#fMobile").value = q.mobile || "";
   $("#fAddress").value = q.address || "";
@@ -223,6 +235,7 @@ function renderItems() {
       <td>
         <div class="code">${esc(it.code)}</div>
         <input class="pname" data-k="label" value="${esc(it.label)}" title="Product name as printed (you can edit it)">
+        <input class="psize" data-k="size" value="${esc(it.size || "")}" placeholder="Size (optional)" title="Size printed under the product name (you can edit it)">
         <div class="series">${esc(it.series)}</div>
       </td>
       <td class="money">${rupee(it.mrp)}</td>
@@ -259,6 +272,7 @@ $("#items").addEventListener("input", (e) => {
   const it = q.items[Number(tr.dataset.i)];
   const k = e.target.dataset.k;
   if (k === "label") it.label = e.target.value;
+  if (k === "size") it.size = e.target.value;
   else {
     it[k] = e.target.value === "" ? "" : Number(e.target.value);
     if (k === "disc") { it.custom = Number(it.disc) !== Number(q.discount); e.target.style.borderColor = it.custom ? "#b26a00" : ""; }
@@ -314,6 +328,7 @@ async function exportWith(btn, fn, ext) {
   btn.disabled = true;
   try {
     btn.textContent = "Preparing…";
+    fillSizes();
     await saveQuote(true);
     const blob = await fn(q, { ...settings, terms: settings.terms }, (i, n) => { btn.textContent = `Photos ${i + 1}/${n}…`; });
     download(blob, fileBase(q) + ext);

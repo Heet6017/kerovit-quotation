@@ -223,7 +223,9 @@ def generic_page(page, coll, state):
             if l["y0"] - last_y > 16:
                 break
             if CODE_LINE.match(l["t"]) and l["bold"]:
-                last_y = l["y1"]; continue          # another code in the same stack
+                if name_lines:
+                    break                           # the next product's code: this name is complete
+                last_y = l["y1"]; continue          # another code in the same stack (shared name below)
             if re.search(rf"Per Piece|^{RUPEE}?\s*({NUM})$", l["t"]):
                 if coll == "KLASSIC":
                     break
@@ -629,11 +631,14 @@ def main():
                     if not variant and len(opts) == 1:
                         variant = ""
                     nm = f"{it['name']} {it['sub']}".strip() if it["name"] else (desc_rows[0] if desc_rows else it["sub"])
+                    details = "; ".join(desc_rows) or "; ".join(clean(r) for r in it["rows"] if SPEC.match(r) and not PRICE_IN.search(r))
+                    if not re.search(r"\bSize\b", details, re.I):   # the size line can sit below a "with ..." line
+                        details = "; ".join([details] + [clean(r) for r in it["rows"] if re.match(r"^Size\b", r, re.I)]).strip("; ")
                     add("KLASSIC", pn, page, "Sanitaryware", it["name"] or it["sub"], it["sub"], o["code"],
                         nm, o["price"], it["_img"],
                         alt_codes=[c for c in it["codes"] if c != o["code"]] if o["code"] == it["codes"][0] else [],
                         variant=clean(variant).replace("`", "₹"),
-                        details="; ".join(desc_rows) or "; ".join(clean(r) for r in it["rows"] if SPEC.match(r) and not PRICE_IN.search(r)),
+                        details=details,
                         flag="Price looks mis-printed in PDF - verify" if o.get("flag") else "",
                         colour="White" if "White" in it["head"] or "White" in " ".join(it["rows"]) else "")
             report.append(f"KLASSIC p{pn} [blocks] products={len(items)} price-tokens={n} " + ("; ".join(probs) if probs else "OK"))

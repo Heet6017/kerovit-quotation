@@ -32,6 +32,34 @@ export function productLabel(p) {
   return s.trim();
 }
 
+/**
+ * Size printed under the product name, from the price-list details:
+ *  "Size : 545X375X375 mm"            -> "Size: 545 x 375 x 375 mm"
+ *  "Height : 280 mm"                  -> "Height: 280 mm"
+ *  "Cabinet 800X500 mm; Mirror 760X700 mm" -> "Cabinet: 800 x 500 mm, Mirror: 760 x 700 mm"
+ *  a part's "185x145x740 mm"          -> "Size: 185 x 145 x 740 mm"
+ * Empty when the name already shows the size (e.g. "Towel Rail 24”") or no size is printed.
+ */
+export function sizeOf(p) {
+  const d = String(p?.details || "");
+  const dims = (s) => s.replace(/\s*[xX×]\s*/g, " x ").replace(/\s*mm$/i, " mm").replace(/\s+/g, " ").trim();
+  const DIM = String.raw`\d+(?:\.\d+)?(?:\s*[xX×]\s*\d+(?:\.\d+)?){1,2}\s*mm`;
+  const out = [];
+  const cab = d.match(new RegExp(`Cabinet\\s*:?\\s*(${DIM})`, "i")), mir = d.match(new RegExp(`Mirror\\s*:?\\s*(${DIM})`, "i"));
+  if (cab) out.push(`Cabinet: ${dims(cab[1])}`);
+  if (mir) out.push(`Mirror: ${dims(mir[1])}`);
+  if (!out.length) {
+    const sz = d.match(new RegExp(`Size\\s*:?\\s*(${DIM})`, "i")) || d.match(new RegExp(`(?:^|;\\s*)(${DIM})`, "i"));
+    if (sz) out.push(`Size: ${dims(sz[1])}`);
+    const h = d.match(/Height\s*[:\-]?\s*(\d+(?:\.\d+)?\s*mm)/i);
+    if (h) out.push(`Height: ${h[1].replace(/\s+/g, " ")}`);
+  }
+  const s = out.join(", ");
+  // skip if the product name already carries these numbers
+  const label = productLabel(p).replace(/\s+/g, "").toLowerCase();
+  return s && label.includes(s.replace(/^[A-Za-z]+:\s*/, "").replace(/\s+/g, "").toLowerCase()) ? "" : s;
+}
+
 export function codeLabel(p) {
   return p.code;
 }

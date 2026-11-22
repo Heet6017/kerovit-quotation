@@ -15,7 +15,7 @@ const EMU_PX = 9525;
 // colours of the approved quotation format: cream page, navy bars, black labels
 const C = {
   navy: [31, 72, 124], ink: [0, 0, 0], label: [0, 0, 0],
-  cream: [255, 249, 243], white: [255, 255, 255], line: [0, 0, 0],
+  cream: [255, 255, 255], white: [255, 255, 255], line: [0, 0, 0],   // page background: pure white
 };
 const THIN = 0.45, MEDIUM = 1.0;
 
@@ -214,8 +214,13 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     font("bold", F9);
     const cellLines = (txt, ci) => doc.splitTextToSize(String(txt || ""), colW(ci) - 2 * pad);
     const L = { B: cellLines(it.series, 1), C: cellLines(it.code, 2), D: cellLines(it.label, 3) };
+    // size under the product name, regular weight
+    const FS = F9 * 0.95;
+    font("normal", FS);
+    const S = it.size ? doc.splitTextToSize(String(it.size), colW(3) - 2 * pad) : [];
+    font("bold", F9);
     const lh = F9 * 1.18;
-    const need = Math.max(L.B.length, L.C.length, L.D.length) * lh + 2 * pad + 2;
+    const need = Math.max(L.B.length, L.C.length, L.D.length + S.length) * lh + 2 * pad + 2;
     const h = Math.max(rowH, need);
     if (y + h > BOTTOM) newPage(true);
 
@@ -228,7 +233,13 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
       lines.forEach((ln, j) => doc.text(ln, x, ty0 + j * lh, { align }));
     };
     vText([String(i + 1)], 0);
-    vText(L.B, 1); vText(L.C, 2); vText(L.D, 3);
+    vText(L.B, 1); vText(L.C, 2);
+    {   // product name (bold) with the size below it, centred as one block
+      const n = L.D.length + S.length, ty0 = mid - ((n - 1) * lh) / 2 + F9 * 0.33, cx = colX[3] + colW(3) / 2;
+      font("bold", F9); L.D.forEach((ln, j) => doc.text(ln, cx, ty0 + j * lh, { align: "center" }));
+      font("normal", FS); S.forEach((ln, j) => doc.text(ln, cx, ty0 + (L.D.length + j) * lh, { align: "center" }));
+      font("bold", F9);
+    }
     const fit = (s, ci, align = "right") => {   // like Excel "shrink to fit" for the narrow amount columns
       font("bold", F9);
       const avail = colW(ci) - 2 * pad, w = doc.getTextWidth(s);
