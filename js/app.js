@@ -331,20 +331,75 @@ function checkReady() {
   return true;
 }
 
+// ---- download progress panel (document being written → steps → green tick)
+const dlUI = (() => {
+  const el = $("#dl"), bar = $("#dlBar"), title = $("#dlTitle"), sub = $("#dlSub"), steps = $$("#dlSteps li");
+  let closeT = null;
+  const close = () => {
+    clearTimeout(closeT);
+    if (el.hidden) return;
+    el.classList.add("out");
+    setTimeout(() => { el.hidden = true; el.classList.remove("out"); }, 280);
+  };
+  el.addEventListener("click", () => { if (!el.classList.contains("working")) close(); });
+  return {
+    open(ext) {
+      clearTimeout(closeT);
+      el.className = "dl working"; el.hidden = false;
+      const pdf = ext === ".pdf";
+      $("#dlBadge").textContent = pdf ? "PDF" : "XLSX";
+      $("#dlBadge").className = "dl-badge" + (pdf ? "" : " xls");
+      this.step(0, 6, "Preparing your quotation", [q.number, q.customer].filter(Boolean).join(" · "));
+    },
+    step(n, pct, t, s) {
+      steps.forEach((li, i) => { li.className = i < n ? "ok" : i === n ? "on" : ""; });
+      bar.style.width = pct + "%";
+      if (t !== undefined) title.textContent = t;
+      if (s !== undefined) sub.textContent = s;
+    },
+    done(name) {
+      el.className = "dl done";
+      steps.forEach((li) => { li.className = "ok"; });
+      bar.style.width = "100%";
+      title.textContent = "Quotation ready";
+      sub.textContent = name;
+      closeT = setTimeout(close, 1900);
+    },
+    fail(msg) {
+      el.className = "dl err";
+      title.textContent = "Could not create the file";
+      sub.textContent = msg;
+      closeT = setTimeout(close, 3500);
+    },
+  };
+})();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function exportWith(btn, fn, ext) {
   if (!checkReady()) return;
   const old = btn.textContent;
+  const kind = ext === ".pdf" ? "PDF" : "Excel";
   btn.disabled = true;
+  const t0 = performance.now();
   try {
     btn.textContent = "Preparing…";
     btn.classList.add("busy");
+    dlUI.open(ext);
     fillSizes();
     await saveQuote(true);
-    const blob = await fn(q, { ...settings, terms: settings.terms }, (i, n) => { btn.textContent = `Photos ${i + 1}/${n}…`; });
+    const n = q.items.length;
+    dlUI.step(1, 14, "Adding product photos", n ? `Photo 1 of ${n}` : "");
+    const blob = await fn(q, { ...settings, terms: settings.terms }, (i, total) => {
+      btn.textContent = `Photos ${i + 1}/${total}…`;
+      dlUI.step(1, 14 + Math.round(72 * (i + 1) / total), "Adding product photos", `Photo ${i + 1} of ${total}`);
+    });
+    dlUI.step(2, 94, `Creating the ${kind} file`, fileBase(q) + ext);
+    await sleep(Math.max(0, 1100 - (performance.now() - t0)));   // long enough to see the steps
     download(blob, fileBase(q) + ext);
-    toast("Downloaded " + ext.slice(1).toUpperCase());
+    dlUI.done(fileBase(q) + ext);
   } catch (err) {
     console.error(err);
+    dlUI.fail(err.message);
     toast("Could not create the file: " + err.message, true);
   } finally {
     btn.disabled = false;

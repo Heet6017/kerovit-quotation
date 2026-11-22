@@ -374,6 +374,72 @@ input, select, textarea { transition: border-color .2s var(--ease), box-shadow .
 }
 @media (min-width: 721px) { .act-wrap { display: flex; align-items: center; } }
 
+/* =====================================================================================
+   Download progress: the page is written line by line, the bar moves through
+   Details → Photos → File, then a green tick draws itself and the panel closes.
+   ===================================================================================== */
+.dl { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px;
+  background: rgba(15, 30, 50, .32); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: kq-fade .2s var(--ease) both; }
+.dl[hidden] { display: none; }
+.dl.out { animation: kq-fade-out .28s var(--ease) both; }
+@keyframes kq-fade-out { to { opacity: 0; } }
+.dl-card { width: 100%; max-width: 340px; background: #fff; border-radius: 16px; padding: 26px 24px 20px;
+  text-align: center; box-shadow: 0 24px 60px rgba(15, 30, 50, .28); animation: kq-pop .35s var(--ease) both; }
+@keyframes kq-pop { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+.dl.out .dl-card { animation: kq-pop-out .28s var(--ease) both; }
+@keyframes kq-pop-out { to { opacity: 0; transform: translateY(8px) scale(.97); } }
+
+.dl-art { position: relative; width: 84px; height: 96px; margin: 0 auto 14px; }
+.dl-doc { position: absolute; left: 10px; top: 4px; width: 64px; height: 80px; overflow: visible;
+  transition: transform .45s var(--ease), opacity .35s var(--ease); }
+.dl-page { fill: #fff; stroke: var(--navy); stroke-width: 2.2; stroke-linejoin: round; }
+.dl-fold { fill: #e7efff; stroke: var(--navy); stroke-width: 2.2; stroke-linejoin: round; }
+.dl-head { fill: var(--navy); opacity: .9; }
+.dl-ln { stroke: #9db3cf; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 44; stroke-dashoffset: 44; }
+/* lines are written one after another, over and over, while the file is being made */
+.dl.working .dl-ln { animation: kq-write 2.2s var(--ease) infinite; }
+.dl.working .l2 { animation-delay: .25s; } .dl.working .l3 { animation-delay: .5s; }
+.dl.working .l4 { animation-delay: .75s; } .dl.working .l5 { animation-delay: 1s; }
+@keyframes kq-write { 0% { stroke-dashoffset: 44; } 35%, 80% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+.dl.working .dl-doc { animation: kq-float 2.2s ease-in-out infinite; }
+@keyframes kq-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.dl-badge { position: absolute; right: 0; bottom: 6px; padding: 2px 7px; border-radius: 6px; font-size: 11px; font-weight: 800;
+  letter-spacing: .5px; color: #fff; background: #c0392b; box-shadow: 0 3px 8px rgba(0, 0, 0, .18);
+  transition: transform .35s var(--ease), opacity .3s var(--ease); }
+.dl-badge.xls { background: #1e7b4a; }
+
+.dl-tick { position: absolute; left: 16px; top: 22px; width: 52px; height: 52px; opacity: 0; }
+.dl-tick circle { fill: #e6f5ec; stroke: var(--ok); stroke-width: 2.5; stroke-dasharray: 145; stroke-dashoffset: 145; }
+.dl-tick path { fill: none; stroke: var(--ok); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 40; stroke-dashoffset: 40; }
+.dl.done .dl-doc { transform: scale(.6) translateY(-6px); opacity: 0; }
+.dl.done .dl-badge { transform: scale(.6); opacity: 0; }
+.dl.done .dl-tick { opacity: 1; animation: kq-tick-pop .5s .15s var(--ease) both; }
+.dl.done .dl-tick circle { animation: kq-draw .5s var(--ease) forwards; }
+.dl.done .dl-tick path { animation: kq-draw .35s .35s var(--ease) forwards; }
+@keyframes kq-draw { to { stroke-dashoffset: 0; } }
+@keyframes kq-tick-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+.dl-title { font-weight: 700; font-size: 16px; color: var(--navy-d); }
+.dl-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; min-height: 18px; word-break: break-word; }
+.dl-bar { height: 6px; border-radius: 6px; background: #edf2f8; overflow: hidden; margin: 16px 0 12px; position: relative; }
+.dl-bar i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 6px;
+  background: linear-gradient(90deg, var(--navy), #3d74a8); transition: width .35s var(--ease), background .3s; }
+/* soft shine moving along the bar while working */
+.dl.working .dl-bar i::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent); animation: kq-shine 1.2s linear infinite; }
+@keyframes kq-shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.dl.done .dl-bar i { background: var(--ok); }
+.dl.err .dl-bar i { background: var(--bad); }
+.dl-steps { display: flex; justify-content: space-between; list-style: none; margin: 0; padding: 0; font-size: 11.5px; color: #a3b0bf; }
+.dl-steps li { display: flex; align-items: center; gap: 5px; transition: color .25s; }
+.dl-steps li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #d5deea; transition: background .25s, transform .25s; }
+.dl-steps li.on { color: var(--navy-d); font-weight: 600; }
+.dl-steps li.on::before { background: var(--navy); transform: scale(1.25); }
+.dl-steps li.ok { color: var(--ok); }
+.dl-steps li.ok::before { background: var(--ok); }
+
 /* respect "reduce motion" */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }

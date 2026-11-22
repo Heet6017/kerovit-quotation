@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1f4e78">
 <title>Kerovit Quotation Maker</title>
 <link rel="icon" href="assets/logo-kerovit.png">
-<link rel="stylesheet" href="css/app.css?v=202611220731">
+<link rel="stylesheet" href="css/app.css?v=202611220735">
 </head>
 <body>
 <header class="topbar">
@@ -214,6 +214,32 @@
 
 <div id="toast" class="toast" hidden></div>
 
+<!-- download progress: a document "being written", progress through the steps, then a tick -->
+<div id="dl" class="dl" hidden role="status" aria-live="polite">
+  <div class="dl-card">
+    <div class="dl-art">
+      <svg class="dl-doc" viewBox="0 0 64 80" aria-hidden="true">
+        <path class="dl-page" d="M8 4h34l14 14v54a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/>
+        <path class="dl-fold" d="M42 4v10a4 4 0 0 0 4 4h10"/>
+        <rect class="dl-head" x="12" y="14" width="22" height="6" rx="2"/>
+        <line class="dl-ln l1" x1="12" y1="30" x2="52" y2="30"/>
+        <line class="dl-ln l2" x1="12" y1="38" x2="46" y2="38"/>
+        <line class="dl-ln l3" x1="12" y1="46" x2="52" y2="46"/>
+        <line class="dl-ln l4" x1="12" y1="54" x2="40" y2="54"/>
+        <line class="dl-ln l5" x1="34" y1="64" x2="52" y2="64"/>
+      </svg>
+      <span class="dl-badge" id="dlBadge">PDF</span>
+      <svg class="dl-tick" viewBox="0 0 52 52" aria-hidden="true">
+        <circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/>
+      </svg>
+    </div>
+    <div class="dl-title" id="dlTitle">Preparing quotation</div>
+    <div class="dl-sub" id="dlSub"></div>
+    <div class="dl-bar"><i id="dlBar"></i></div>
+    <ol class="dl-steps" id="dlSteps"><li>Details</li><li>Photos</li><li>File</li></ol>
+  </div>
+</div>
+
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/pdf.min.js"></script>
@@ -222,13 +248,13 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/app.js": "./js/app.js?v=202611220731",
-    "./js/store.js": "./js/store.js?v=202611220731",
-    "./js/common.js": "./js/common.js?v=202611220731",
-    "./js/search.js": "./js/search.js?v=202611220731",
-    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611220731",
-    "./js/pdf-export.js": "./js/pdf-export.js?v=202611220731",
-    "./js/pricelist.js": "./js/pricelist.js?v=202611220731"
+    "./js/app.js": "./js/app.js?v=202611220735",
+    "./js/store.js": "./js/store.js?v=202611220735",
+    "./js/common.js": "./js/common.js?v=202611220735",
+    "./js/search.js": "./js/search.js?v=202611220735",
+    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611220735",
+    "./js/pdf-export.js": "./js/pdf-export.js?v=202611220735",
+    "./js/pricelist.js": "./js/pricelist.js?v=202611220735"
   }
 }
 </script>
