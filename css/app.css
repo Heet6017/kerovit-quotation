@@ -483,11 +483,12 @@ input, select, textarea { transition: border-color .2s var(--ease), box-shadow .
 body {
   background:
     radial-gradient(1100px 420px at 50% -160px, rgba(31, 78, 120, .13), transparent 70%),
-    radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0 / 22px 22px,
     var(--bg);
   background-attachment: fixed;
   transition: background-color .3s var(--ease), color .3s var(--ease);
 }
+/* living dot-grid background (js/bg.js) sits behind everything and never takes clicks */
+.bg-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 .topbar { background: var(--surface); backdrop-filter: saturate(160%) blur(10px); -webkit-backdrop-filter: saturate(160%) blur(10px); }
 :root:not([data-theme="dark"]) .topbar { --surface: rgba(255, 255, 255, .86); }
 .brand img { transition: transform .5s var(--ease); }
