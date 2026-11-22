@@ -117,6 +117,31 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
 
+// ---------------------------------------------------------------- Android app download count (Settings)
+// GitHub counts every download of the APK from the release; read it when Settings is opened.
+let statsAt = 0;
+async function loadApkStats() {
+  const el = $("#apkStats");
+  if (!el || Date.now() - statsAt < 60000) return;
+  statsAt = Date.now();
+  try {
+    const res = await fetch("https://api.github.com/repos/Heet6017/kerovit-quotation/releases?per_page=100", { cache: "no-cache" });
+    if (!res.ok) throw new Error(res.status);
+    let total = 0, latest = null;
+    for (const r of await res.json()) for (const a of r.assets || []) if (a.name.endsWith(".apk")) {
+      total += a.download_count;
+      if (!latest) latest = { v: r.tag_name, n: a.download_count };
+    }
+    el.textContent = `Downloads: ${total.toLocaleString("en-IN")} in total` +
+      (latest && latest.n !== total ? ` (${latest.n.toLocaleString("en-IN")} of ${latest.v})` : "") +
+      ". Counted by GitHub since 22 Nov 2026; one person downloading twice counts twice.";
+  } catch {
+    statsAt = 0;
+    el.textContent = "Downloads: can't load the count right now (needs internet).";
+  }
+}
+$('#tabs button[data-tab="settings"]')?.addEventListener("click", loadApkStats);
+
 // ---------------------------------------------------------------- step numbers turn into ticks
 const steps = $$("#tab-quote .steps > .card");
 function updateSteps() {
