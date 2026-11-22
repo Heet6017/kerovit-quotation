@@ -163,6 +163,7 @@ function productImages(pg, squares = false) {
     const r = R(Math.max(0, r0.x0), Math.max(0, r0.y0), Math.min(W, r0.x1), Math.min(H, r0.y1));
     if (rw(r) < 4 || rh(r) < 4 || rw(r) > W - 20) continue;
     if (rw(r) * rh(r) > 0.25 * W * H) continue;
+    if (rh(r) > 0.45 * H) continue;               // decorative full-height strip at the page edge
     if (Math.abs(rw(r) - rh(r)) < 4 && rw(r) < 45 && (n.get(sz(r0)) >= 3 || !squares)) continue;
     out.push(r);
   }
@@ -266,9 +267,27 @@ function genericPage(pg, coll, st) {
       let a = i, b = i;
       while (a > 0 && col[a].y0 - col[a - 1].y0 < 20) a--;
       while (b < col.length - 1 && col[b + 1].y0 - col[b].y0 < 20) b++;
-      const top = a > 0 ? (col[a - 1].y0 + col[a].y0) / 2 + 10 : col[a].y0 - 120;
-      const bot = b < col.length - 1 ? (col[b + 1].y0 + col[b].y0) / 2 + 10 : col[b].y0 + 120;
-      img = unionIn(imgs, 0, top, c.x0 - 2, bot);
+      let top = a > 0 ? (col[a - 1].y0 + col[a].y0) / 2 + 10 : col[a].y0 - 120;
+      let bot = b < col.length - 1 ? (col[b + 1].y0 + col[b].y0) / 2 + 10 : col[b].y0 + 120;
+      // products in the other column(s) also end this product's row (same rules as tools/extract.py)
+      for (const o of codes) {
+        if (Math.abs(o.x0 - c.x0) < 20) continue;
+        if (o.y0 < col[a].y0 - 20) top = Math.max(top, (o.y0 + col[a].y0) / 2 + 10);
+        else if (o.y0 > col[b].y0 + 20) bot = Math.min(bot, (o.y0 + col[b].y0) / 2 + 10);
+      }
+      // two-column layout: the right product's photo starts after the left product's code
+      const lo = Math.max(0, ...codes.filter((o) => o.x0 < c.x0 - 40 && o.y0 >= top && o.y0 <= bot).map((o) => o.x0));
+      img = unionIn(imgs, lo, top, c.x0 - 2, bot);
+      if (img) {   // stop at neighbouring pictures that overlap (their margins bring in the next product)
+        const r = { ...img };
+        for (const o of imgs) {
+          const inside = o.x0 >= r.x0 - 0.5 && o.x1 <= r.x1 + 0.5 && o.y0 >= r.y0 - 0.5 && o.y1 <= r.y1 + 0.5;
+          if (inside || Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0) < 0.3 * Math.min(rw(o), rw(r))) continue;
+          if (o.y0 > r.y0 && o.y0 < r.y1 && (o.y0 + o.y1) / 2 > c.y0) r.y1 = Math.min(r.y1, o.y0 - 3);
+          else if (o.y1 < r.y1 && o.y1 > r.y0 && (o.y0 + o.y1) / 2 < c.y0) r.y0 = Math.max(r.y0, o.y1 + 3);
+        }
+        if (rh(r) > 10) img = r;
+      }
     }
     if (!img) img = nearestImg(imgs, c.x0, c.y0);
     const [ctext, extraName] = codePart(c.t);

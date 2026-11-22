@@ -116,6 +116,8 @@ def product_images(page, squares=False):
             continue
         if r.width * r.height > 0.25 * W * H:          # lifestyle photo
             continue
+        if r.height > 0.45 * H:                         # decorative full-height strip at the page edge
+            continue
         b = info["bbox"]
         repeated = size_n[(round(b[2] - b[0]), round(b[3] - b[1]))] >= 3
         if abs(r.width - r.height) < 4 and r.width < 45 and (repeated or not squares):  # QR code / feature icon
@@ -134,6 +136,30 @@ def nearest_img(rects, x, y, limit=200):
         if d < best:
             best, out = d, r
     return out
+
+
+def trim_to_own(page, rects, img, code_y):
+    """Cut a product photo so it shows only this product: stop at the row separator lines and at the
+    pictures of neighbouring products that overlap it (their white margins otherwise bring in parts
+    of the next product or the separator line)."""
+    r = pymupdf.Rect(img)
+    inside = [o for o in rects if o.x0 >= r.x0 - 0.5 and o.x1 <= r.x1 + 0.5 and o.y0 >= r.y0 - 0.5 and o.y1 <= r.y1 + 0.5]
+    for o in rects:
+        if o in inside or min(o.x1, r.x1) - max(o.x0, r.x0) < 0.3 * min(o.width, r.width):
+            continue
+        if o.y0 > r.y0 and o.y0 < r.y1 and (o.y0 + o.y1) / 2 > code_y:      # picture below overlaps
+            r.y1 = min(r.y1, o.y0)
+        elif o.y1 < r.y1 and o.y1 > r.y0 and (o.y0 + o.y1) / 2 < code_y:    # picture above overlaps
+            r.y0 = max(r.y0, o.y1)
+    for d in page.get_drawings():                                           # row separator lines
+        s = d["rect"]
+        # (3 pt gap: the photo is saved with 2 pt padding, which must not reach the line)
+        if s.width > 200 and s.height < 3 and s.x0 < r.x1 and s.x1 > r.x0 and r.y0 - 4 < s.y0 < r.y1 + 4:
+            if s.y0 > code_y:
+                r.y1 = min(r.y1, s.y0 - 3)
+            else:
+                r.y0 = max(r.y0, s.y1 + 3)
+    return r if r.height > 10 else img
 
 
 def union_in(rects, x0, y0, x1, y1):
@@ -257,7 +283,19 @@ def generic_page(page, coll, state):
             while b < len(col) - 1 and col[b + 1]["y0"] - col[b]["y0"] < 20: b += 1
             top = (col[a - 1]["y0"] + col[a]["y0"]) / 2 + 10 if a > 0 else col[a]["y0"] - 120
             bot = (col[b + 1]["y0"] + col[b]["y0"]) / 2 + 10 if b < len(col) - 1 else col[b]["y0"] + 120
-            img = union_in(imgs, 0, top, c["x0"] - 2, bot)
+            # products in the other column(s) also end this product's row, above and below
+            for o in codes:
+                if abs(o["x0"] - c["x0"]) < 20:
+                    continue
+                if o["y0"] < col[a]["y0"] - 20:
+                    top = max(top, (o["y0"] + col[a]["y0"]) / 2 + 10)
+                elif o["y0"] > col[b]["y0"] + 20:
+                    bot = min(bot, (o["y0"] + col[b]["y0"]) / 2 + 10)
+            # in a two-column layout the photo of the right product starts after the left product's code
+            lo = max([o["x0"] for o in codes if o["x0"] < c["x0"] - 40 and top <= o["y0"] <= bot] + [0])
+            img = union_in(imgs, lo, top, c["x0"] - 2, bot)
+            if img is not None:
+                img = trim_to_own(page, imgs, img, c["y0"])
         if img is None:
             img = nearest_img(imgs, c["x0"], c["y0"])
         ctext, extra_name = code_part(c["t"])
