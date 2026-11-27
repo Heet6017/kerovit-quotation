@@ -70,6 +70,10 @@ export function calcLine(it) {
   return { rate, total };
 }
 
+/** GST on one line (for the optional "GST Amt" column).
+ *  shortcut: rounded per line, so the column sum can differ by a few paise from Total TAX (which is taxed on the sum). */
+export const lineGst = (total, gstPct) => round2(total * (Number(gstPct) || 0) / 100);
+
 /**
  * Quotation totals:
  *  qty      Total Quantity

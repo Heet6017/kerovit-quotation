@@ -604,3 +604,88 @@ img.thumb:not(.loaded), .res img:not(.loaded) { background: linear-gradient(90de
 .set-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: #1f3864; color: #fff; font-size: 11px; font-weight: 700; line-height: 17px; vertical-align: 1px; }
 .items .psize { width: 100%; border: 1px solid transparent; padding: 1px 5px; margin-left: -6px; font-size: 12px; color: var(--muted); background: transparent; }
 .items .psize:hover, .items .psize:focus { border-color: var(--line); }
+
+/* ---------------------------------------------------------------- levers (hide discount / GST column) */
+.levers { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
+.lever {
+  display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--card); text-align: left;
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease), transform .15s var(--ease);
+}
+.lever:hover { border-color: var(--accent); }
+.lever:active { transform: scale(.97); }
+.lever:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lever-txt { display: flex; flex-direction: column; line-height: 1.2; }
+.lever-txt b { font-size: 13px; color: var(--ink); }
+.lever-txt small { font-size: 11.5px; color: var(--muted); }
+.lever[aria-checked="false"] .lever-txt small { color: var(--warn); font-weight: 600; }
+
+/* metal plate with a slot; the arm pivots at the bottom */
+.lever-slot {
+  position: relative; width: 40px; height: 40px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 35% 30%, #4a5d72, #1b2836 70%);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .25);
+}
+.lever-slot::after {          /* pivot bolt */
+  content: ""; position: absolute; left: 50%; bottom: 7px; width: 10px; height: 10px; margin-left: -5px;
+  border-radius: 50%; background: radial-gradient(circle at 35% 35%, #d9e1ea, #6b7c8f); z-index: 2;
+}
+.lever-arm {
+  position: absolute; left: 50%; bottom: 12px; width: 4px; height: 24px; margin-left: -2px; border-radius: 2px;
+  background: linear-gradient(90deg, #9fb0c2, #e9eef4 45%, #7b8da1); transform-origin: 50% 100%;
+  transform: rotate(-38deg);
+  transition: transform .55s cubic-bezier(.5, -0.7, .25, 1.9);   /* wind-up, then overshoot */
+}
+.lever-knob {
+  position: absolute; left: 50%; top: -7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6fe3a0, var(--ok) 65%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, .4); transition: background .3s;
+}
+.lever[aria-checked="false"] .lever-arm { transform: rotate(38deg); }
+.lever[aria-checked="false"] .lever-knob { background: radial-gradient(circle at 35% 30%, #ffd27a, #c2410c 65%); }
+
+/* the pull: plate thunks, knob flares */
+@keyframes kq-thunk { 0% { transform: none; } 30% { transform: translateY(2px) scale(.94); } 60% { transform: translateY(-1px) scale(1.04); } 100% { transform: none; } }
+@keyframes kq-flare { 0% { box-shadow: 0 0 0 0 rgba(232, 163, 61, .9); } 100% { box-shadow: 0 0 0 16px rgba(232, 163, 61, 0); } }
+.lever.pulled .lever-slot { animation: kq-thunk .45s .12s var(--ease); }
+.lever.pulled .lever-knob { animation: kq-flare .7s .2s ease-out; }
+.lever.pulled { border-color: #e8a33d; }
+
+.spark {
+  position: absolute; left: 50%; bottom: 12px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%;
+  background: #ffd27a; box-shadow: 0 0 6px 1px #ff9d2e; pointer-events: none; z-index: 3;
+  animation: kq-spark .6s .15s ease-out both;
+}
+@keyframes kq-spark { from { transform: translate(0, 0) scale(1.4); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; } }
+
+/* the whole card jolts when a lever lands */
+@keyframes kq-jolt { 0%, 100% { transform: none; } 20% { transform: translateX(-4px) rotate(-.3deg); } 40% { transform: translateX(4px) rotate(.3deg); }
+  60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
+.card.jolt { animation: kq-jolt .45s .35s var(--ease); }
+
+/* columns being switched off / on */
+.items.no-disc .c-mrp, .items.no-disc .c-disc, .items:not(.show-gst) .c-gst, .totals.no-disc .t-mrp { display: none !important; }
+@keyframes kq-col-out {
+  0% { opacity: 1; transform: none; filter: none; background-color: transparent; }
+  35% { background-color: rgba(194, 65, 12, .18); transform: scale(1.06); }
+  100% { opacity: 0; transform: translateY(14px) scale(.6) rotate(-6deg); filter: blur(3px); }
+}
+@keyframes kq-col-in {
+  0% { opacity: 0; transform: translateY(-18px) scale(1.5); filter: blur(4px); }
+  60% { opacity: 1; transform: translateY(3px) scale(.96); filter: none; background-color: var(--glow); }
+  100% { transform: none; background-color: transparent; }
+}
+@keyframes kq-rate-flash { 0% { background-color: transparent; } 25% { background-color: rgba(232, 163, 61, .35); transform: scale(1.08); } 100% { background-color: transparent; transform: none; } }
+.items .col-out { animation: kq-col-out .42s cubic-bezier(.55, 0, .7, .2) both; }
+.items .col-in { animation: kq-col-in .6s var(--ease) both; }
+.items .rate-flash { animation: kq-rate-flash 1.1s var(--ease); font-weight: 700; }
+
+/* phone cards: put the GST amount between Rate and Total */
+@media (max-width: 720px) {
+  .items.show-gst .c-rate { grid-column: 1 / span 2; }
+  .items .c-gst { grid-column: 3 / span 2; grid-row: 3; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+  .items.show-gst .c-total { grid-column: 5 / span 2; }
+  .items.no-disc .c-qty { grid-column: 1 / span 6; }
+  .levers { gap: 8px; }
+  .lever { flex: 1 1 150px; }
+}

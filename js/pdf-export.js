@@ -1,6 +1,6 @@
 // PDF export: draws the quotation with the same geometry, colours and fonts as the Excel
 // template printed on A4 (Carlito = metric-compatible Calibri, includes the ₹ sign).
-import { calcLine, calcQuote, fmtDate, inr, loadImageScaled, amountInWords } from "./common.js";
+import { calcLine, calcQuote, lineGst, fmtDate, inr, loadImageScaled, amountInWords } from "./common.js";
 import { imageURL, TERMS_TITLE, MAKER_FIELDS } from "./store.js";
 
 const A4 = { w: 595.28, h: 841.89 };
@@ -131,19 +131,34 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
 
   // ---------------------------------------------------------------- row 3: table header (repeated on each page)
   const h3 = 29 * RK;
-  const heads = ["Sr. No.", "Collection / Series", "Model Code", "Product Name", "Product Image", "MRP", "Qty", "Disc. %", "Rate", "Total"];
+  // number columns: the levers can drop MRP + Disc. % (customer sees only the rate after discount) and add GST Amt.
+  // They share the width of the template's 5 number columns, so the page width and the header stay the same.
+  const NUM = [
+    !q.hideDisc && ["MRP", 61, (it) => "₹" + inr(it.mrp)],
+    ["Qty", 42, (it) => String(it.qty), "center"],
+    !q.hideDisc && ["Disc. %", 42, (it) => String(Number(it.disc) || 0), "center"],
+    ["Rate", 61, (it, l) => "₹" + inr(l.rate)],
+    ["Total", 61, (it, l) => "₹" + inr(l.total)],
+    q.showGst && [`GST ${settings.gst}%`, 61, (it, l) => "₹" + inr(lineGst(l.total, settings.gst))],
+  ].filter(Boolean);
+  const numW = colX[10] - colX[5], wSum = NUM.reduce((a, c) => a + c[1], 0);
+  const nx = colX.slice(0, 6);
+  for (const c of NUM) nx.push(nx[nx.length - 1] + c[1] * numW / wSum);
+  const nw = (i) => nx[i + 1] - nx[i];
+  const NC = nx.length - 1;
+  const heads = ["Sr. No.", "Collection / Series", "Model Code", "Product Name", "Product Image", ...NUM.map((c) => c[0])];
   const drawHeader = () => {
     fill(M, y, RIGHT - M, h3, C.navy);
     font("bold", F11, C.white);
     heads.forEach((t, i) => {
       // "Disc. %" stays on one line (smaller), longer headings wrap
       font("bold", F11, C.white);
-      if (!t.includes("/") && doc.getTextWidth(t) > colW(i) - 4) doc.setFontSize(F11 * (colW(i) - 4) / doc.getTextWidth(t));
-      const lines = t.includes("/") || t.length > 12 ? doc.splitTextToSize(t, colW(i) - 4) : [t];
+      if (!t.includes("/") && doc.getTextWidth(t) > nw(i) - 4) doc.setFontSize(F11 * (nw(i) - 4) / doc.getTextWidth(t));
+      const lines = t.includes("/") || t.length > 12 ? doc.splitTextToSize(t, nw(i) - 4) : [t];
       const lh = F11 * 1.05;
       const ty0 = y + h3 / 2 - ((lines.length - 1) * lh) / 2 + F11 * 0.32;
-      lines.forEach((ln, j) => doc.text(ln, colX[i] + colW(i) / 2, ty0 + j * lh, { align: "center" }));
-      box(colX[i], y, colW(i), h3, THIN);
+      lines.forEach((ln, j) => doc.text(ln, nx[i] + nw(i) / 2, ty0 + j * lh, { align: "center" }));
+      box(nx[i], y, nw(i), h3, THIN);
     });
     y += h3;
   };
@@ -229,7 +244,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     const mid = y + h / 2;
     const vText = (lines, ci, align = "center") => {
       const ty0 = mid - ((lines.length - 1) * lh) / 2 + F9 * 0.33;
-      const x = align === "center" ? colX[ci] + colW(ci) / 2 : align === "right" ? colX[ci + 1] - pad : colX[ci] + pad;
+      const x = align === "center" ? nx[ci] + nw(ci) / 2 : align === "right" ? nx[ci + 1] - pad : nx[ci] + pad;
       lines.forEach((ln, j) => doc.text(ln, x, ty0 + j * lh, { align }));
     };
     vText([String(i + 1)], 0);
@@ -242,16 +257,12 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     }
     const fit = (s, ci, align = "right") => {   // like Excel "shrink to fit" for the narrow amount columns
       font("bold", F9);
-      const avail = colW(ci) - 2 * pad, w = doc.getTextWidth(s);
+      const avail = nw(ci) - 2 * pad, w = doc.getTextWidth(s);
       if (w > avail) doc.setFontSize(F9 * avail / w);
       vText([s], ci, align);
       font("bold", F9);
     };
-    fit("₹" + inr(it.mrp), 5);
-    fit(String(it.qty), 6, "center");
-    fit(String(Number(it.disc) || 0), 7, "center");
-    fit("₹" + inr(rate), 8);
-    fit("₹" + inr(total), 9);
+    NUM.forEach((c, k) => fit(c[2](it, { rate, total }), 5 + k, c[3] || "right"));
 
     // photo
     const url = await imageURL({ image: it.image });
@@ -262,7 +273,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
       const w = img.w * k, hh = img.h * k;
       doc.addImage(img.dataURL, "JPEG", colX[4] + (colW(4) - w) / 2, y + (h - hh) / 2, w, hh, undefined, "FAST");
     }
-    for (let c = 0; c < 10; c++) box(colX[c], y, colW(c), h, THIN);
+    for (let c = 0; c < NC; c++) box(nx[c], y, nw(c), h, THIN);
     y += h;
   }
 
@@ -272,21 +283,21 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   const tot = calcQuote(q, settings.gst);
   const rows = [
     ["Total Quantity", String(tot.qty)],
-    ["Total MRP", "₹" + inr(tot.mrpTotal)],
+    ...(q.hideDisc ? [] : [["Total MRP", "₹" + inr(tot.mrpTotal)]]),
     ["Total Taxable Amount", "₹" + inr(tot.sub)],
     ["Total Tax / GST", "₹" + inr(tot.gst)],
   ];
   if (y + totH > BOTTOM) newPage();
   const sumTop = y;
-  const valCol = 9;
+  const valCol = NC - 1;
   const sumRow = (label, val, h, fs, bg, color) => {
     fill(M, y, RIGHT - M, h, bg);
     font("bold", fs, color);
-    doc.text(label, colX[valCol] - 4, y + h / 2 + fs * 0.33, { align: "right" });
-    const avail = RIGHT - colX[valCol] - 5, w = doc.getTextWidth(val);
+    doc.text(label, nx[valCol] - 4, y + h / 2 + fs * 0.33, { align: "right" });
+    const avail = RIGHT - nx[valCol] - 5, w = doc.getTextWidth(val);
     if (w > avail) doc.setFontSize(fs * avail / w);
     doc.text(val, RIGHT - 3, y + h / 2 + fs * 0.33, { align: "right" });
-    line(colX[valCol], y, colX[valCol], y + h, THIN);
+    line(nx[valCol], y, nx[valCol], y + h, THIN);
     line(M, y + h, RIGHT, y + h, THIN);
     y += h;
   };

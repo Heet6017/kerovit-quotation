@@ -1,6 +1,6 @@
 import * as store from "./store.js";
 import { buildIndex, search, highlight } from "./search.js";
-import { esc, rupee, inr, calcLine, calcQuote, seriesLabel, productLabel, sizeOf, todayISO, fmtDate, fileBase, download, amountInWords } from "./common.js";
+import { esc, rupee, inr, calcLine, calcQuote, lineGst, seriesLabel, productLabel, sizeOf, todayISO, fmtDate, fileBase, download, amountInWords } from "./common.js";
 import { buildXlsx } from "./xlsx-export.js";
 import { buildPdf } from "./pdf-export.js";
 import { parsePriceList, diffPriceList, applyPriceList } from "./pricelist.js";
@@ -248,16 +248,79 @@ function renderItems() {
            style="${it.custom ? "border-color:#b26a00" : ""}"></td>
       <td class="money c-rate" data-label="Rate">${rupee(rate)}</td>
       <td class="money total c-total" data-label="Total">${rupee(total)}</td>
+      <td class="money c-gst" data-label="GST Amt">${rupee(lineGst(total, settings.gst))}</td>
       <td class="c-act"><div class="act-wrap">
         <div class="mv"><button class="icon-btn" data-act="up" title="Move up">▲</button><button class="icon-btn" data-act="down" title="Move down">▼</button></div>
         <button class="icon-btn" data-act="del" title="Remove">✕</button></div></td>
     </tr>`;
   }).join("");
   flashIndex = -1;
+  syncLevers();
   $("#emptyItems").hidden = q.items.length > 0;
   $("#itemCount").textContent = q.items.length ? `${q.items.length} product${q.items.length > 1 ? "s" : ""}` : "";
   renderTotals();
 }
+
+// ================================================================ levers: hide discount / show GST column
+// State lives on the quotation (q.hideDisc, q.showGst) so a saved quotation reopens the same way;
+// the PDF reads the same two flags.
+
+const LEVERS = { lvDisc: { key: "hideDisc", on: false, cols: ".c-mrp, .c-disc" }, lvGst: { key: "showGst", on: true, cols: ".c-gst" } };
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function syncLevers() {
+  const tbl = $("#items");
+  tbl.classList.toggle("no-disc", !!q.hideDisc);
+  tbl.classList.toggle("show-gst", !!q.showGst);
+  $("#totalsBox").classList.toggle("no-disc", !!q.hideDisc);
+  $("#thGst").textContent = `GST ${settings.gst}%`;
+  for (const [id, L] of Object.entries(LEVERS)) {
+    const btn = $("#" + id), shown = !!q[L.key] === L.on;   // "shown" = the column is visible
+    btn.setAttribute("aria-checked", String(shown));
+    const small = btn.querySelector("small");
+    small.textContent = shown ? small.dataset.on : small.dataset.off;
+  }
+}
+
+function sparks(btn) {
+  const slot = btn.querySelector(".lever-slot");
+  for (let i = 0; i < 10; i++) {
+    const s = document.createElement("i");
+    s.className = "spark";
+    const a = (Math.PI * (i / 9)) + Math.PI, d = 18 + Math.random() * 22;   // fan upwards
+    s.style.setProperty("--dx", `${Math.cos(a) * d}px`);
+    s.style.setProperty("--dy", `${Math.sin(a) * d}px`);
+    slot.appendChild(s);
+    setTimeout(() => s.remove(), 700);
+  }
+}
+
+function pullLever(id) {
+  const L = LEVERS[id], btn = $("#" + id), tbl = $("#items");
+  const willShow = !(!!q[L.key] === L.on);
+  const swap = () => { q[L.key] = willShow ? L.on : !L.on; persist(); syncLevers(); renderTotals(); };
+  btn.classList.remove("pulled"); void btn.offsetWidth; btn.classList.add("pulled");
+  setTimeout(() => btn.classList.remove("pulled"), 900);
+  if (reducedMotion()) return swap();
+  sparks(btn);
+  const card = btn.closest(".card");
+  card.classList.remove("jolt"); void card.offsetWidth; card.classList.add("jolt");
+  if (willShow) {
+    swap();
+    tbl.querySelectorAll(L.cols).forEach((c, i) => { c.style.animationDelay = `${Math.min(i, 12) * 30}ms`; c.classList.add("col-in"); });
+    setTimeout(() => tbl.querySelectorAll(".col-in").forEach((c) => { c.classList.remove("col-in"); c.style.animationDelay = ""; }), 1100);
+  } else {
+    tbl.querySelectorAll(L.cols).forEach((c) => c.classList.add("col-out"));
+    setTimeout(() => {
+      tbl.querySelectorAll(".col-out").forEach((c) => c.classList.remove("col-out"));
+      swap();
+      if (id === "lvDisc") tbl.querySelectorAll(".c-rate").forEach((c) => {   // the rate is now the only price: flash it
+        c.classList.add("rate-flash"); setTimeout(() => c.classList.remove("rate-flash"), 1200);
+      });
+    }, 420);
+  }
+}
+for (const id of Object.keys(LEVERS)) $("#" + id).addEventListener("click", () => pullLever(id));
 
 function renderTotals() {
   const t = calcQuote(q, settings.gst);
@@ -286,8 +349,9 @@ $("#items").addEventListener("input", (e) => {
     it[k] = e.target.value === "" ? "" : Number(e.target.value);
     if (k === "disc") { it.custom = Number(it.disc) !== Number(q.discount); e.target.style.borderColor = it.custom ? "#b26a00" : ""; }
     const { rate, total } = calcLine(it);
-    tr.children[6].textContent = rupee(rate);
-    tr.children[7].textContent = rupee(total);
+    tr.querySelector(".c-rate").textContent = rupee(rate);
+    tr.querySelector(".c-total").textContent = rupee(total);
+    tr.querySelector(".c-gst").textContent = rupee(lineGst(total, settings.gst));
     renderTotals();
   }
   persist();
@@ -444,7 +508,7 @@ $("#savedTable").addEventListener("click", async (e) => {
   }
   if (b.dataset.act === "open") q = x;
   if (b.dataset.act === "copy") {
-    q = { ...newQuote(), type: x.type, discount: x.discount, items: x.items.map((it) => ({ ...it })) };
+    q = { ...newQuote(), type: x.type, discount: x.discount, hideDisc: x.hideDisc, showGst: x.showGst, items: x.items.map((it) => ({ ...it })) };
   }
   loadIntoForm();
   persist();
