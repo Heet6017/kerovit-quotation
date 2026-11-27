@@ -130,33 +130,56 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   y += h2;
 
   // ---------------------------------------------------------------- row 3: table header (repeated on each page)
-  const h3 = 29 * RK;
-  // number columns: the levers can drop MRP + Disc. % (customer sees only the rate after discount) and add GST Amt.
-  // They share the width of the template's 5 number columns, so the page width and the header stay the same.
+  // number columns, as in the approved format:
+  //   Qty | MRP | Rate After Disc. | Disc. % | Total Taxable Amount | Total Tax / GST Amount | Total Amount
+  // The Discount lever drops "Disc. %"; the GST lever drops the GST and Total Amount columns.
+  const lineAmt = (l) => lineGst(l.total, settings.gst);
   const NUM = [
-    !q.hideDisc && ["MRP", 61, (it) => "₹" + inr(it.mrp)],
     ["Qty", 42, (it) => String(it.qty), "center"],
+    ["MRP", 61, (it) => "₹" + inr(it.mrp)],
+    [q.hideDisc ? "Rate After Disc." : "Rate", 61, (it, l) => "₹" + inr(l.rate)],
     !q.hideDisc && ["Disc. %", 42, (it) => String(Number(it.disc) || 0), "center"],
-    ["Rate", 61, (it, l) => "₹" + inr(l.rate)],
-    ["Total", 61, (it, l) => "₹" + inr(l.total)],
-    q.showGst && [`GST ${settings.gst}%`, 61, (it, l) => "₹" + inr(lineGst(l.total, settings.gst))],
+    ["Total Taxable Amount", 61, (it, l) => "₹" + inr(l.total)],
+    !q.hideGst && ["Total Tax / GST Amount", 61, (it, l) => "₹" + inr(lineAmt(l))],
+    !q.hideGst && ["Total Amount", 61, (it, l) => "₹" + inr(l.total + lineAmt(l))],
   ].filter(Boolean);
-  const numW = colX[10] - colX[5], wSum = NUM.reduce((a, c) => a + c[1], 0);
-  const nx = colX.slice(0, 6);
+  // the number columns get ~85% of their natural width; what the template's 5 number columns lack
+  // is taken from Product Name and Product Image (each kept at a readable minimum)
+  const wSum = NUM.reduce((a, c) => a + c[1], 0);
+  const baseW = COLS_PX.slice(0, 5).map((px) => px * K);
+  let extra = Math.max(0, wSum * 0.95 * K - (colX[10] - colX[5]));
+  for (const [ci, minPx] of [[3, 92], [4, 70], [2, 74], [1, 62]]) {   // name, photo, code, series
+    const take = Math.min(extra, baseW[ci] - minPx * K);
+    baseW[ci] -= take; extra -= take;
+  }
+  const nx = [M];
+  for (const w of baseW) nx.push(nx[nx.length - 1] + w);
+  const numW = RIGHT - nx[5];
   for (const c of NUM) nx.push(nx[nx.length - 1] + c[1] * numW / wSum);
   const nw = (i) => nx[i + 1] - nx[i];
   const NC = nx.length - 1;
   const heads = ["Sr. No.", "Collection / Series", "Model Code", "Product Name", "Product Image", ...NUM.map((c) => c[0])];
+  // headings wrap between words only: the font shrinks until the longest word fits its column;
+  // the header grows to fit headings that need three lines
+  const headFit = heads.map((t, i) => {
+    font("bold", F11, C.white);
+    const avail = nw(i) - 4, wrap = t.includes("/") || t.length > 12 || t.startsWith("Total");
+    const widest = Math.max(...(wrap ? t.split(" ") : [t]).map((w) => doc.getTextWidth(w)));
+    const fs = widest > avail ? F11 * avail / widest : F11;
+    doc.setFontSize(fs);
+    return { fs, lines: wrap ? doc.splitTextToSize(t, avail) : [t] };
+  });
+  const h3 = Math.max(29 * RK, Math.max(...headFit.map((h) => h.lines.length * h.fs * 1.05)) + 8);
   const drawHeader = () => {
     fill(M, y, RIGHT - M, h3, C.navy);
     font("bold", F11, C.white);
     heads.forEach((t, i) => {
       // "Disc. %" stays on one line (smaller), longer headings wrap
       font("bold", F11, C.white);
-      if (!t.includes("/") && doc.getTextWidth(t) > nw(i) - 4) doc.setFontSize(F11 * (nw(i) - 4) / doc.getTextWidth(t));
-      const lines = t.includes("/") || t.length > 12 ? doc.splitTextToSize(t, nw(i) - 4) : [t];
-      const lh = F11 * 1.05;
-      const ty0 = y + h3 / 2 - ((lines.length - 1) * lh) / 2 + F11 * 0.32;
+      const { lines, fs } = headFit[i];
+      doc.setFontSize(fs);
+      const lh = fs * 1.05;
+      const ty0 = y + h3 / 2 - ((lines.length - 1) * lh) / 2 + fs * 0.32;
       lines.forEach((ln, j) => doc.text(ln, nx[i] + nw(i) / 2, ty0 + j * lh, { align: "center" }));
       box(nx[i], y, nw(i), h3, THIN);
     });
@@ -227,12 +250,12 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     const it = q.items[i];
     const { rate, total } = calcLine(it);
     font("bold", F9);
-    const cellLines = (txt, ci) => doc.splitTextToSize(String(txt || ""), colW(ci) - 2 * pad);
+    const cellLines = (txt, ci) => doc.splitTextToSize(String(txt || ""), nw(ci) - 2 * pad);
     const L = { B: cellLines(it.series, 1), C: cellLines(it.code, 2), D: cellLines(it.label, 3) };
     // size under the product name, regular weight
     const FS = F9 * 0.95;
     font("normal", FS);
-    const S = it.size ? doc.splitTextToSize(String(it.size), colW(3) - 2 * pad) : [];
+    const S = it.size ? doc.splitTextToSize(String(it.size), nw(3) - 2 * pad) : [];
     font("bold", F9);
     const lh = F9 * 1.18;
     const need = Math.max(L.B.length, L.C.length, L.D.length + S.length) * lh + 2 * pad + 2;
@@ -250,7 +273,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     vText([String(i + 1)], 0);
     vText(L.B, 1); vText(L.C, 2);
     {   // product name (bold) with the size below it, centred as one block
-      const n = L.D.length + S.length, ty0 = mid - ((n - 1) * lh) / 2 + F9 * 0.33, cx = colX[3] + colW(3) / 2;
+      const n = L.D.length + S.length, ty0 = mid - ((n - 1) * lh) / 2 + F9 * 0.33, cx = nx[3] + nw(3) / 2;
       font("bold", F9); L.D.forEach((ln, j) => doc.text(ln, cx, ty0 + j * lh, { align: "center" }));
       font("normal", FS); S.forEach((ln, j) => doc.text(ln, cx, ty0 + (L.D.length + j) * lh, { align: "center" }));
       font("bold", F9);
@@ -268,10 +291,10 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
     const url = await imageURL({ image: it.image });
     const img = await loadImageScaled(url, 800, "image/jpeg", 0.92);
     if (img) {
-      const bw = colW(4) - 6, bh = Math.min(h, 100) - 6;
+      const bw = nw(4) - 6, bh = Math.min(h, 100) - 6;
       const k = Math.min(bw / img.w, bh / img.h);
       const w = img.w * k, hh = img.h * k;
-      doc.addImage(img.dataURL, "JPEG", colX[4] + (colW(4) - w) / 2, y + (h - hh) / 2, w, hh, undefined, "FAST");
+      doc.addImage(img.dataURL, "JPEG", nx[4] + (nw(4) - w) / 2, y + (h - hh) / 2, w, hh, undefined, "FAST");
     }
     for (let c = 0; c < NC; c++) box(nx[c], y, nw(c), h, THIN);
     y += h;
@@ -283,7 +306,7 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
   const tot = calcQuote(q, settings.gst);
   const rows = [
     ["Total Quantity", String(tot.qty)],
-    ...(q.hideDisc ? [] : [["Total MRP", "₹" + inr(tot.mrpTotal)]]),
+    ["Total MRP", "₹" + inr(tot.mrpTotal)],
     ["Total Taxable Amount", "₹" + inr(tot.sub)],
     ["Total Tax / GST", "₹" + inr(tot.gst)],
   ];

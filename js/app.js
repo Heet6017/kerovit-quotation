@@ -234,21 +234,22 @@ function renderItems() {
     const { rate, total } = calcLine(it);
     return `<tr data-i="${i}"${i === flashIndex ? ' class="row-new"' : ""}>
       <td class="c-no">${i + 1}</td>
-      <td class="c-img"><img class="thumb" src="${esc(store.imageURLSync({ image: it.image }))}" alt="" onerror="this.style.visibility='hidden'"></td>
+      <td class="c-series"><div class="series">${esc(it.series)}</div></td>
+      <td class="c-code"><div class="code">${esc(it.code)}</div></td>
       <td class="c-prod">
-        <div class="code">${esc(it.code)}</div>
         <input class="pname" data-k="label" value="${esc(it.label)}" title="Product name as printed (you can edit it)">
         <input class="psize" data-k="size" value="${esc(it.size || "")}" placeholder="Size (optional)" title="Size printed under the product name (you can edit it)">
-        <div class="series">${esc(it.series)}</div>
       </td>
-      <td class="money c-mrp" data-label="MRP">${rupee(it.mrp)}</td>
+      <td class="c-img"><img class="thumb" src="${esc(store.imageURLSync({ image: it.image }))}" alt="" onerror="this.style.visibility='hidden'"></td>
       <td class="c-qty" data-label="Qty"><input class="num" data-k="qty" type="number" min="0" step="1" value="${esc(it.qty)}"></td>
-      <td class="c-disc" data-label="Disc %"><input class="num" data-k="disc" type="number" min="0" max="100" step="0.5" value="${esc(it.disc)}"
+      <td class="money c-mrp" data-label="MRP">${rupee(it.mrp)}</td>
+      <td class="money c-rate" data-label="${q.hideDisc ? "Rate After Disc." : "Rate"}">${rupee(rate)}</td>
+      <td class="c-disc" data-label="Disc. %"><input class="num" data-k="disc" type="number" min="0" max="100" step="0.5" value="${esc(it.disc)}"
            title="${it.custom ? "Custom discount for this line" : "Follows the quotation discount"}"
            style="${it.custom ? "border-color:#b26a00" : ""}"></td>
-      <td class="money c-rate" data-label="Rate">${rupee(rate)}</td>
-      <td class="money total c-total" data-label="Total">${rupee(total)}</td>
+      <td class="money total c-total" data-label="Taxable Amt">${rupee(total)}</td>
       <td class="money c-gst" data-label="GST Amt">${rupee(lineGst(total, settings.gst))}</td>
+      <td class="money total c-amt" data-label="Total Amount">${rupee(total + lineGst(total, settings.gst))}</td>
       <td class="c-act"><div class="act-wrap">
         <div class="mv"><button class="icon-btn" data-act="up" title="Move up">▲</button><button class="icon-btn" data-act="down" title="Move down">▼</button></div>
         <button class="icon-btn" data-act="del" title="Remove">✕</button></div></td>
@@ -262,18 +263,20 @@ function renderItems() {
 }
 
 // ================================================================ levers: hide discount / show GST column
-// State lives on the quotation (q.hideDisc, q.showGst) so a saved quotation reopens the same way;
+// State lives on the quotation (q.hideDisc, q.hideGst) so a saved quotation reopens the same way;
 // the PDF reads the same two flags.
 
-const LEVERS = { lvDisc: { key: "hideDisc", on: false, cols: ".c-mrp, .c-disc" }, lvGst: { key: "showGst", on: true, cols: ".c-gst" } };
+const LEVERS = { lvDisc: { key: "hideDisc", on: false, cols: ".c-disc" }, lvGst: { key: "hideGst", on: false, cols: ".c-gst, .c-amt" } };
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function syncLevers() {
   const tbl = $("#items");
   tbl.classList.toggle("no-disc", !!q.hideDisc);
-  tbl.classList.toggle("show-gst", !!q.showGst);
-  $("#totalsBox").classList.toggle("no-disc", !!q.hideDisc);
-  $("#thGst").textContent = `GST ${settings.gst}%`;
+  tbl.classList.toggle("no-gst", !!q.hideGst);
+  // with Disc. % on show the rate is just "Rate"; once it is hidden the heading says the discount is already in it
+  const rateLabel = q.hideDisc ? "Rate After Disc." : "Rate";
+  $("#thRate").textContent = rateLabel;
+  tbl.querySelectorAll("td.c-rate").forEach((td) => { td.dataset.label = rateLabel; });
   for (const [id, L] of Object.entries(LEVERS)) {
     const btn = $("#" + id), shown = !!q[L.key] === L.on;   // "shown" = the column is visible
     btn.setAttribute("aria-checked", String(shown));
@@ -314,7 +317,7 @@ function pullLever(id) {
     setTimeout(() => {
       tbl.querySelectorAll(".col-out").forEach((c) => c.classList.remove("col-out"));
       swap();
-      if (id === "lvDisc") tbl.querySelectorAll(".c-rate").forEach((c) => {   // the rate is now the only price: flash it
+      if (id === "lvDisc") tbl.querySelectorAll(".c-rate").forEach((c) => {   // the rate after discount now speaks for itself: flash it
         c.classList.add("rate-flash"); setTimeout(() => c.classList.remove("rate-flash"), 1200);
       });
     }, 420);
@@ -352,6 +355,7 @@ $("#items").addEventListener("input", (e) => {
     tr.querySelector(".c-rate").textContent = rupee(rate);
     tr.querySelector(".c-total").textContent = rupee(total);
     tr.querySelector(".c-gst").textContent = rupee(lineGst(total, settings.gst));
+    tr.querySelector(".c-amt").textContent = rupee(total + lineGst(total, settings.gst));
     renderTotals();
   }
   persist();
@@ -508,7 +512,7 @@ $("#savedTable").addEventListener("click", async (e) => {
   }
   if (b.dataset.act === "open") q = x;
   if (b.dataset.act === "copy") {
-    q = { ...newQuote(), type: x.type, discount: x.discount, hideDisc: x.hideDisc, showGst: x.showGst, items: x.items.map((it) => ({ ...it })) };
+    q = { ...newQuote(), type: x.type, discount: x.discount, hideDisc: x.hideDisc, hideGst: x.hideGst, items: x.items.map((it) => ({ ...it })) };
   }
   loadIntoForm();
   persist();

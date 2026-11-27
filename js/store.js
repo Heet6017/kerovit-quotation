@@ -117,7 +117,8 @@ async function loadBuiltIn() {
 // rev 4: small square product photos (robe hook, body jets, nipples) no longer mistaken for QR codes.
 // rev 5: size lines kept for one-piece WCs listed "with In-Built Jet" (KSP712RLW-JET, KSP709RLW-JET).
 // rev 6: one product per photo on two-column Aurum pages (basins in colours, MBRG faucets, hand showers).
-export const DB_REV = 6;
+// rev 7: Aurum concealed bodies (…1035 / …1034 / …1022) listed code by code with their MRP; one photo per body.
+export const DB_REV = 7;
 export let dbUpgraded = false;
 
 export async function loadProducts() {

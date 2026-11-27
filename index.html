@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Kerovit Quote">
-<link rel="stylesheet" href="css/app.css?v=202611271200">
+<link rel="stylesheet" href="css/app.css?v=202611271600">
 <script>
   // theme before the first paint (no white flash in dark mode): saved choice, else the device setting
   (function () {
@@ -97,14 +97,14 @@
         <!-- levers: what the customer sees in the table and the PDF -->
         <div class="levers">
           <button type="button" class="lever" id="lvDisc" role="switch" aria-checked="true"
-                  title="Hide MRP and Disc. %: the customer sees only the rate after discount">
+                  title="Hide the Disc. % column: the customer sees MRP and the rate after discount">
             <span class="lever-slot"><span class="lever-arm"><span class="lever-knob"></span></span></span>
-            <span class="lever-txt"><b>Discount</b><small data-on="Shown" data-off="Hidden · rate after discount"></small></span>
+            <span class="lever-txt"><b>Discount</b><small data-on="Shown" data-off="Disc. % hidden"></small></span>
           </button>
-          <button type="button" class="lever" id="lvGst" role="switch" aria-checked="false"
-                  title="Add a GST amount column for every product">
+          <button type="button" class="lever" id="lvGst" role="switch" aria-checked="true"
+                  title="Show or hide the GST amount and Total Amount of every product">
             <span class="lever-slot"><span class="lever-arm"><span class="lever-knob"></span></span></span>
-            <span class="lever-txt"><b>GST column</b><small data-on="Shown" data-off="Hidden"></small></span>
+            <span class="lever-txt"><b>GST columns</b><small data-on="Shown" data-off="Hidden"></small></span>
           </button>
         </div>
         <div class="search-wrap">
@@ -115,8 +115,8 @@
         <div class="table-wrap">
           <table class="items" id="items">
             <thead><tr>
-              <th>#</th><th>Photo</th><th>Product</th><th class="r c-mrp">MRP</th><th>Qty</th><th class="c-disc">Disc %</th>
-              <th class="r c-rate">Rate</th><th class="r c-total">Total</th><th class="r c-gst" id="thGst">GST Amt</th><th></th>
+              <th>Sr. No.</th><th class="c-series">Collection / Series</th><th>Model Code</th><th>Product Name</th><th>Product Image</th><th>Qty</th><th class="r c-mrp">MRP</th><th class="r c-rate" id="thRate">Rate</th><th class="c-disc">Disc. %</th>
+              <th class="r c-total">Total Taxable Amount</th><th class="r c-gst" id="thGst">Total Tax / GST Amount</th><th class="r c-amt">Total Amount</th><th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -124,7 +124,7 @@
         </div>
         <div class="totals" id="totalsBox">
           <div><span>Total Quantity</span><b id="tQty">0</b></div>
-          <div class="t-mrp"><span>Total MRP</span><b id="tMrp">₹0.00</b></div>
+          <div><span>Total MRP</span><b id="tMrp">₹0.00</b></div>
           <div><span>Total Taxable Amt</span><b id="tSub">₹0.00</b></div>
           <div><span id="tGstLabel">Total TAX (GST 18%)</span><b id="tGst">₹0.00</b></div>
           <div class="grand"><span>Net Amt</span><b id="tGrand">₹0</b></div>
@@ -288,18 +288,18 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/app.js": "./js/app.js?v=202611271200",
-    "./js/store.js": "./js/store.js?v=202611271200",
-    "./js/common.js": "./js/common.js?v=202611271200",
-    "./js/search.js": "./js/search.js?v=202611271200",
-    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611271200",
-    "./js/pdf-export.js": "./js/pdf-export.js?v=202611271200",
-    "./js/pricelist.js": "./js/pricelist.js?v=202611271200"
+    "./js/app.js": "./js/app.js?v=202611271600",
+    "./js/store.js": "./js/store.js?v=202611271600",
+    "./js/common.js": "./js/common.js?v=202611271600",
+    "./js/search.js": "./js/search.js?v=202611271600",
+    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611271600",
+    "./js/pdf-export.js": "./js/pdf-export.js?v=202611271600",
+    "./js/pricelist.js": "./js/pricelist.js?v=202611271600"
   }
 }
 </script>
 <script type="module">import "./js/app.js";</script>
-<script type="module" src="js/ui.js?v=202611271200"></script>
-<script type="module" src="js/bg.js?v=202611271200"></script>
+<script type="module" src="js/ui.js?v=202611271600"></script>
+<script type="module" src="js/bg.js?v=202611271600"></script>
 </body>
 </html>

@@ -177,7 +177,9 @@ table { border-collapse: collapse; width: 100%; }
 .r { text-align: right; }
 .items .code { font-weight: 700; color: var(--accent-strong); }
 .items .series { font-size: 12px; color: var(--muted); }
-.items td:nth-child(3) { min-width: 300px; width: 40%; }
+.items td.c-prod { min-width: 170px; width: 22%; }
+.items th.c-series { white-space: normal; line-height: 1.2; }
+.items .c-no { text-align: center; }
 .items .pname { width: 100%; border: 1px solid transparent; padding: 3px 5px; margin-left: -6px; font-size: 13px; }
 .items .pname:hover { border-color: var(--line); }
 .items input.num { width: 70px; padding: 6px 8px; text-align: right; }
@@ -362,17 +364,19 @@ input, select, textarea { transition: border-color .2s var(--ease), box-shadow .
     padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(20, 40, 70, .05);
   }
   .items td { padding: 0; border: 0; min-width: 0; }
-  .items td:nth-child(3) { min-width: 0; width: auto; }
+  .items td.c-prod { min-width: 0; width: auto; }
   .items .c-no { display: none; }
-  .items .c-img { grid-column: 1 / span 1; grid-row: 1; align-self: start; }
+  .items .c-img { grid-column: 1 / span 1; grid-row: 1 / span 3; align-self: start; }
+  .items .c-code { grid-column: 2 / span 4; grid-row: 1; }
+  .items .c-series { grid-column: 2 / span 4; grid-row: 3; }
   .items .c-img .thumb { width: 52px; height: 52px; }
-  .items .c-prod { grid-column: 2 / span 4; grid-row: 1; }
-  .items .c-act { grid-column: 6; grid-row: 1; align-self: start; justify-self: end; }
-  .items .c-qty { grid-column: 1 / span 2; grid-row: 2; }
-  .items .c-disc { grid-column: 3 / span 2; grid-row: 2; }
-  .items .c-mrp { grid-column: 5 / span 2; grid-row: 2; text-align: right; align-items: flex-end; }
-  .items .c-rate { grid-column: 1 / span 3; grid-row: 3; }
-  .items .c-total { grid-column: 4 / span 3; grid-row: 3; }
+  .items .c-prod { grid-column: 2 / span 4; grid-row: 2; }
+  .items .c-act { grid-column: 6; grid-row: 1 / span 3; align-self: start; justify-self: end; }
+  .items .c-qty { grid-column: 1 / span 2; grid-row: 4; }
+  .items .c-disc { grid-column: 3 / span 2; grid-row: 4; }
+  .items .c-mrp { grid-column: 5 / span 2; grid-row: 4; text-align: right; align-items: flex-end; }
+  .items .c-rate { grid-column: 1 / span 3; grid-row: 5; }
+  .items .c-total { grid-column: 4 / span 3; grid-row: 5; }
   .items td[data-label] { display: flex; flex-direction: column; gap: 3px; text-align: left; }
   .items td[data-label]::before { content: attr(data-label); font-size: 11px; font-weight: 600; color: var(--muted);
     text-transform: uppercase; letter-spacing: .4px; }
@@ -664,7 +668,7 @@ img.thumb:not(.loaded), .res img:not(.loaded) { background: linear-gradient(90de
 .card.jolt { animation: kq-jolt .45s .35s var(--ease); }
 
 /* columns being switched off / on */
-.items.no-disc .c-mrp, .items.no-disc .c-disc, .items:not(.show-gst) .c-gst, .totals.no-disc .t-mrp { display: none !important; }
+.items.no-disc .c-disc, .items.no-gst .c-gst, .items.no-gst .c-amt { display: none !important; }
 @keyframes kq-col-out {
   0% { opacity: 1; transform: none; filter: none; background-color: transparent; }
   35% { background-color: rgba(194, 65, 12, .18); transform: scale(1.06); }
@@ -682,10 +686,13 @@ img.thumb:not(.loaded), .res img:not(.loaded) { background: linear-gradient(90de
 
 /* phone cards: put the GST amount between Rate and Total */
 @media (max-width: 720px) {
-  .items.show-gst .c-rate { grid-column: 1 / span 2; }
-  .items .c-gst { grid-column: 3 / span 2; grid-row: 3; border-top: 1px solid var(--line-soft); padding-top: 8px; }
-  .items.show-gst .c-total { grid-column: 5 / span 2; }
-  .items.no-disc .c-qty { grid-column: 1 / span 6; }
+  /* rows: Qty / Disc. % / MRP, then Rate After Disc. / Taxable, then GST / Total Amount */
+  .items .c-gst { grid-column: 1 / span 3; grid-row: 6; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+  .items .c-amt { grid-column: 4 / span 3; grid-row: 6; border-top: 1px solid var(--line-soft); padding-top: 8px;
+    text-align: right; align-items: flex-end; color: var(--accent-strong); font-size: 16px; }
+  .items.no-disc .c-qty { grid-column: 1 / span 4; }
+  .items:not(.no-gst) .c-total { font-size: 14px; color: inherit; }
   .levers { gap: 8px; }
   .lever { flex: 1 1 150px; }
 }
+.items th.c-rate, .items th.c-total, .items th.c-gst, .items th.c-amt { white-space: normal; line-height: 1.2; min-width: 84px; }
