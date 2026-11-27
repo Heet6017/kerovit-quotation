@@ -243,10 +243,10 @@ function renderItems() {
       <td class="c-img"><img class="thumb" src="${esc(store.imageURLSync({ image: it.image }))}" alt="" onerror="this.style.visibility='hidden'"></td>
       <td class="c-qty" data-label="Qty"><input class="num" data-k="qty" type="number" min="0" step="1" value="${esc(it.qty)}"></td>
       <td class="money c-mrp" data-label="MRP">${rupee(it.mrp)}</td>
-      <td class="money c-rate" data-label="${q.hideDisc ? "Rate After Disc." : "Rate"}">${rupee(rate)}</td>
       <td class="c-disc" data-label="Disc. %"><input class="num" data-k="disc" type="number" min="0" max="100" step="0.5" value="${esc(it.disc)}"
            title="${it.custom ? "Custom discount for this line" : "Follows the quotation discount"}"
            style="${it.custom ? "border-color:#b26a00" : ""}"></td>
+      <td class="money c-rate" data-label="Rate After Disc.">${rupee(rate)}</td>
       <td class="money total c-total" data-label="Taxable Amt">${rupee(total)}</td>
       <td class="money c-gst" data-label="GST Amt">${rupee(lineGst(total, settings.gst))}</td>
       <td class="money total c-amt" data-label="Total Amount">${rupee(total + lineGst(total, settings.gst))}</td>
@@ -273,10 +273,6 @@ function syncLevers() {
   const tbl = $("#items");
   tbl.classList.toggle("no-disc", !!q.hideDisc);
   tbl.classList.toggle("no-gst", !!q.hideGst);
-  // with Disc. % on show the rate is just "Rate"; once it is hidden the heading says the discount is already in it
-  const rateLabel = q.hideDisc ? "Rate After Disc." : "Rate";
-  $("#thRate").textContent = rateLabel;
-  tbl.querySelectorAll("td.c-rate").forEach((td) => { td.dataset.label = rateLabel; });
   for (const [id, L] of Object.entries(LEVERS)) {
     const btn = $("#" + id), shown = !!q[L.key] === L.on;   // "shown" = the column is visible
     btn.setAttribute("aria-checked", String(shown));

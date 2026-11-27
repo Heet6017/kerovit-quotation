@@ -131,14 +131,14 @@ export async function buildPdf(q, settings, onProgress = () => {}) {
 
   // ---------------------------------------------------------------- row 3: table header (repeated on each page)
   // number columns, as in the approved format:
-  //   Qty | MRP | Rate After Disc. | Disc. % | Total Taxable Amount | Total Tax / GST Amount | Total Amount
+  //   Qty | MRP | Disc. % | Rate After Disc. | Total Taxable Amount | Total Tax / GST Amount | Total Amount
   // The Discount lever drops "Disc. %"; the GST lever drops the GST and Total Amount columns.
   const lineAmt = (l) => lineGst(l.total, settings.gst);
   const NUM = [
     ["Qty", 42, (it) => String(it.qty), "center"],
     ["MRP", 61, (it) => "₹" + inr(it.mrp)],
-    [q.hideDisc ? "Rate After Disc." : "Rate", 61, (it, l) => "₹" + inr(l.rate)],
     !q.hideDisc && ["Disc. %", 42, (it) => String(Number(it.disc) || 0), "center"],
+    ["Rate After Disc.", 61, (it, l) => "₹" + inr(l.rate)],
     ["Total Taxable Amount", 61, (it, l) => "₹" + inr(l.total)],
     !q.hideGst && ["Total Tax / GST Amount", 61, (it, l) => "₹" + inr(lineAmt(l))],
     !q.hideGst && ["Total Amount", 61, (it, l) => "₹" + inr(l.total + lineAmt(l))],
