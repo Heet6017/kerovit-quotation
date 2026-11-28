@@ -474,6 +474,57 @@ async function exportWith(btn, fn, ext) {
 
 $("#btnXlsx").addEventListener("click", (e) => exportWith(e.currentTarget, buildXlsx, ".xlsx"));
 $("#btnPdf").addEventListener("click", (e) => exportWith(e.currentTarget, buildPdf, ".pdf"));
+
+// ---- preview: builds the same PDF and draws its pages with pdf.js (nothing is saved or numbered)
+let pvRun = 0;
+async function openPreview() {
+  if (!q.items.length) { toast("Add at least one product first.", true); return; }
+  const run = ++pvRun, pv = $("#pv"), pages = $("#pvPages"), info = $("#pvInfo");
+  pv.hidden = false;
+  document.body.classList.add("pv-open");
+  info.textContent = "";
+  pages.innerHTML = '<div class="pv-msg">Preparing preview…</div>';
+  $("#pvClose").focus();
+  try {
+    fillSizes();
+    const blob = await buildPdf(q, { ...settings, terms: settings.terms }, (i, n) => {
+      const m = pages.querySelector(".pv-msg");
+      if (m && run === pvRun) m.textContent = `Adding product photos ${i + 1} of ${n}…`;
+    });
+    if (run !== pvRun) return;   // closed or reopened meanwhile
+    const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise;
+    if (run !== pvRun) return;
+    pages.innerHTML = "";
+    const cssW = Math.min(pages.clientWidth - 24, 860);
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      if (run !== pvRun) return;
+      const scale = (cssW / page.getViewport({ scale: 1 }).width) * Math.min(window.devicePixelRatio || 1, 2);
+      const vp = page.getViewport({ scale });
+      const c = document.createElement("canvas");
+      c.className = "pv-page"; c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      c.style.width = cssW + "px";
+      c.setAttribute("aria-label", `Page ${n} of ${doc.numPages}`);
+      pages.appendChild(c);
+      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    }
+    if (run !== pvRun) return;
+    info.textContent = `${fileBase(q)}.pdf · ${doc.numPages} page${doc.numPages > 1 ? "s" : ""}`;
+  } catch (err) {
+    console.error(err);
+    if (run === pvRun) pages.innerHTML = `<div class="pv-msg">Could not create the preview: ${esc(err.message)}</div>`;
+  }
+}
+function closePreview() {
+  pvRun++;
+  $("#pv").hidden = true;
+  document.body.classList.remove("pv-open");
+  $("#pvPages").innerHTML = "";
+}
+$("#btnPreview").addEventListener("click", openPreview);
+$("#pvClose").addEventListener("click", closePreview);
+$("#pvPdf").addEventListener("click", () => { closePreview(); $("#btnPdf").click(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#pv").hidden) closePreview(); });
 $("#btnSave").addEventListener("click", () => saveQuote(false));
 
 // ================================================================ saved quotations
