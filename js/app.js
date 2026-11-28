@@ -475,7 +475,7 @@ async function exportWith(btn, fn, ext) {
 $("#btnXlsx").addEventListener("click", (e) => exportWith(e.currentTarget, buildXlsx, ".xlsx"));
 $("#btnPdf").addEventListener("click", (e) => exportWith(e.currentTarget, buildPdf, ".pdf"));
 
-// ---- step 5 preview: builds the same PDF and draws its pages with pdf.js (nothing is saved or numbered)
+// ---- preview (step 4): builds the same PDF and draws its pages with pdf.js (nothing is saved or numbered)
 let pvRun = 0;
 async function showPreview() {
   if (!q.items.length) { toast("Add at least one product first.", true); return; }
@@ -517,7 +517,6 @@ async function showPreview() {
   }
 }
 $("#btnPreview").addEventListener("click", showPreview);
-$("#pvPdf").addEventListener("click", () => $("#btnPdf").click());
 $("#btnSave").addEventListener("click", () => saveQuote(false));
 
 // ================================================================ saved quotations

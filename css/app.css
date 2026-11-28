@@ -697,7 +697,8 @@ img.thumb:not(.loaded), .res img:not(.loaded) { background: linear-gradient(90de
 }
 .items th.c-rate, .items th.c-total, .items th.c-gst, .items th.c-amt { white-space: normal; line-height: 1.2; min-width: 84px; }
 
-/* ---------------------------------------------------------------- step 5: quotation preview */
-.pv-pages { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 14px; }
+/* ---------------------------------------------------------------- quotation preview (step 4) */
+.pv-pages { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.pv-pages:not(:empty) { margin-top: 14px; }
 .pv-page { background: #fff; box-shadow: 0 4px 18px var(--shadow); border: 1px solid var(--line); border-radius: 2px; max-width: 100%; height: auto; }
 .pv-msg { align-self: stretch; text-align: center; padding: 18px 0; margin: 0; }
