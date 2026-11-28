@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Kerovit Quote">
-<link rel="stylesheet" href="css/app.css?v=202611271800">
+<link rel="stylesheet" href="css/app.css?v=202611271900">
 <script>
   // theme before the first paint (no white flash in dark mode): saved choice, else the device setting
   (function () {
@@ -136,12 +136,23 @@
       <div class="card">
         <div class="card-head"><span class="num">4</span><h2>Download</h2></div>
         <div class="actions">
-          <button class="btn" id="btnPreview">👁 Preview quotation</button>
           <button class="btn primary" id="btnPdf">⬇ Download PDF</button>
           <button class="btn primary" id="btnXlsx">⬇ Download Excel</button>
           <button class="btn" id="btnSave">Save quotation</button>
           <span class="muted" id="saveState"></span>
         </div>
+      </div>
+
+      <!-- Step 5: preview, the PDF pages drawn on screen (also works on phones, where PDFs can't be shown inside a page) -->
+      <div class="card" id="pvCard">
+        <div class="card-head"><span class="num">5</span><h2>Preview quotation</h2>
+          <div class="spacer"></div><span class="muted" id="pvInfo"></span>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btnPreview">👁 Show preview</button>
+          <button class="btn primary" id="pvPdf">⬇ Download PDF</button>
+        </div>
+        <div class="pv-pages" id="pvPages"><p class="hint pv-msg">Press <b>Show preview</b> to see the quotation exactly as the PDF will look.</p></div>
       </div>
     </div>
   </section>
@@ -255,16 +266,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<!-- quotation preview: the PDF pages drawn on screen (works on phones too, where PDFs can't be shown inside a page) -->
-<div id="pv" class="pv" hidden role="dialog" aria-modal="true" aria-labelledby="pvTitle">
-  <div class="pv-bar">
-    <div class="pv-head"><b id="pvTitle">Quotation preview</b><span id="pvInfo"></span></div>
-    <button class="btn primary" id="pvPdf">⬇ Download PDF</button>
-    <button class="btn" id="pvClose" aria-label="Close preview">✕</button>
-  </div>
-  <div class="pv-pages" id="pvPages"></div>
-</div>
-
 <!-- download progress: a document "being written", progress through the steps, then a tick -->
 <div id="dl" class="dl" hidden role="status" aria-live="polite">
   <div class="dl-card">
@@ -299,18 +300,18 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/app.js": "./js/app.js?v=202611271800",
-    "./js/store.js": "./js/store.js?v=202611271800",
-    "./js/common.js": "./js/common.js?v=202611271800",
-    "./js/search.js": "./js/search.js?v=202611271800",
-    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611271800",
-    "./js/pdf-export.js": "./js/pdf-export.js?v=202611271800",
-    "./js/pricelist.js": "./js/pricelist.js?v=202611271800"
+    "./js/app.js": "./js/app.js?v=202611271900",
+    "./js/store.js": "./js/store.js?v=202611271900",
+    "./js/common.js": "./js/common.js?v=202611271900",
+    "./js/search.js": "./js/search.js?v=202611271900",
+    "./js/xlsx-export.js": "./js/xlsx-export.js?v=202611271900",
+    "./js/pdf-export.js": "./js/pdf-export.js?v=202611271900",
+    "./js/pricelist.js": "./js/pricelist.js?v=202611271900"
   }
 }
 </script>
 <script type="module">import "./js/app.js";</script>
-<script type="module" src="js/ui.js?v=202611271800"></script>
-<script type="module" src="js/bg.js?v=202611271800"></script>
+<script type="module" src="js/ui.js?v=202611271900"></script>
+<script type="module" src="js/bg.js?v=202611271900"></script>
 </body>
 </html>

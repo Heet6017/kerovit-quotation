@@ -475,27 +475,25 @@ async function exportWith(btn, fn, ext) {
 $("#btnXlsx").addEventListener("click", (e) => exportWith(e.currentTarget, buildXlsx, ".xlsx"));
 $("#btnPdf").addEventListener("click", (e) => exportWith(e.currentTarget, buildPdf, ".pdf"));
 
-// ---- preview: builds the same PDF and draws its pages with pdf.js (nothing is saved or numbered)
+// ---- step 5 preview: builds the same PDF and draws its pages with pdf.js (nothing is saved or numbered)
 let pvRun = 0;
-async function openPreview() {
+async function showPreview() {
   if (!q.items.length) { toast("Add at least one product first.", true); return; }
-  const run = ++pvRun, pv = $("#pv"), pages = $("#pvPages"), info = $("#pvInfo");
-  pv.hidden = false;
-  document.body.classList.add("pv-open");
+  const run = ++pvRun, pages = $("#pvPages"), info = $("#pvInfo"), btn = $("#btnPreview");
   info.textContent = "";
-  pages.innerHTML = '<div class="pv-msg">Preparing preview…</div>';
-  $("#pvClose").focus();
+  btn.disabled = true; btn.classList.add("busy");
+  pages.innerHTML = '<p class="hint pv-msg">Preparing preview…</p>';
   try {
     fillSizes();
     const blob = await buildPdf(q, { ...settings, terms: settings.terms }, (i, n) => {
       const m = pages.querySelector(".pv-msg");
       if (m && run === pvRun) m.textContent = `Adding product photos ${i + 1} of ${n}…`;
     });
-    if (run !== pvRun) return;   // closed or reopened meanwhile
+    if (run !== pvRun) return;   // pressed again meanwhile
     const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise;
     if (run !== pvRun) return;
     pages.innerHTML = "";
-    const cssW = Math.min(pages.clientWidth - 24, 860);
+    const cssW = Math.min(pages.clientWidth, 820);
     for (let n = 1; n <= doc.numPages; n++) {
       const page = await doc.getPage(n);
       if (run !== pvRun) return;
@@ -509,22 +507,17 @@ async function openPreview() {
       await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
     }
     if (run !== pvRun) return;
-    info.textContent = `${fileBase(q)}.pdf · ${doc.numPages} page${doc.numPages > 1 ? "s" : ""}`;
+    info.textContent = `${doc.numPages} page${doc.numPages > 1 ? "s" : ""}`;
+    btn.textContent = "↻ Refresh preview";
   } catch (err) {
     console.error(err);
-    if (run === pvRun) pages.innerHTML = `<div class="pv-msg">Could not create the preview: ${esc(err.message)}</div>`;
+    if (run === pvRun) pages.innerHTML = `<p class="hint pv-msg">Could not create the preview: ${esc(err.message)}</p>`;
+  } finally {
+    if (run === pvRun) { btn.disabled = false; btn.classList.remove("busy"); }
   }
 }
-function closePreview() {
-  pvRun++;
-  $("#pv").hidden = true;
-  document.body.classList.remove("pv-open");
-  $("#pvPages").innerHTML = "";
-}
-$("#btnPreview").addEventListener("click", openPreview);
-$("#pvClose").addEventListener("click", closePreview);
-$("#pvPdf").addEventListener("click", () => { closePreview(); $("#btnPdf").click(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#pv").hidden) closePreview(); });
+$("#btnPreview").addEventListener("click", showPreview);
+$("#pvPdf").addEventListener("click", () => $("#btnPdf").click());
 $("#btnSave").addEventListener("click", () => saveQuote(false));
 
 // ================================================================ saved quotations
